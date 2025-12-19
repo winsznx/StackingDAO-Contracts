@@ -1,0 +1,67 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      
+      - name: Install Clarinet
+        run: |
+          wget -nv https://github.com/hirosystems/clarinet/releases/download/v2.11.2/clarinet-linux-x64.tar.gz
+          tar -xzf clarinet-linux-x64.tar.gz
+          chmod +x ./clarinet
+          sudo mv ./clarinet /usr/local/bin/
+          clarinet --version
+      
+      - name: Check contracts
+        run: clarinet check
+      
+      - name: Run tests
+        run: clarinet test --coverage
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.lcov
+          flags: clarity-contracts
+          name: clarity-coverage
+      
+      - name: Test summary
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Install Clarinet
+        run: |
+          wget -nv https://github.com/hirosystems/clarinet/releases/download/v2.11.2/clarinet-linux-x64.tar.gz
+          tar -xzf clarinet-linux-x64.tar.gz
+          chmod +x ./clarinet
+          sudo mv ./clarinet /usr/local/bin/
+      
+      - name: Lint contracts
+        run: |
+          for file in contracts/**/*.clar; do
+            echo "Checking $file"
+            clarinet check "$file" || exit 1
+          done
