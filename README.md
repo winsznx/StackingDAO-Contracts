@@ -4,7 +4,6 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Clarity](https://img.shields.io/badge/clarity-v2-purple.svg)](https://clarity-lang.org/)
-[![Tests](https://img.shields.io/badge/tests-passing-green.svg)](tests/)
 
 ## Overview
 
@@ -39,10 +38,11 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 ```bash
 # Clone the repository
 git clone https://github.com/StackingDAO/contracts.git
-cd StackingDAO-Contracts
+cd contracts
+npm install
 
 # Run tests
-clarinet test
+npm test
 
 # Check contracts
 clarinet check
@@ -96,13 +96,13 @@ See [docs/integration-guide.md](docs/integration-guide.md) for complete examples
 
 ```bash
 # Run all tests
-clarinet test
+npm test
 
-# Run specific test file
-clarinet test tests/stacking-dao-core-v3_test.ts
+# Run one test file
+npx vitest run tests/version-3/data-core_test.ts
 
-# Generate coverage report
-clarinet test --coverage
+# Coverage (lcov.info) and cost report
+npm run test:report
 ```
 
 ### Contract Versions
@@ -128,7 +128,7 @@ Audit reports are available in the [`audits/`](audits/) directory.
 
 ### Reporting Vulnerabilities
 
-Please report security vulnerabilities to security@stackingdao.com. See [SECURITY.md](SECURITY.md) for our responsible disclosure policy.
+Please report security vulnerabilities privately through GitHub (Security > Report a vulnerability on this repository), not in public issues.
 
 ## Protocol Integrations
 

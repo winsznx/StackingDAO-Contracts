@@ -77,7 +77,7 @@ All audit reports available in [`/audits`](../audits/) directory.
 
 ## Reporting Vulnerabilities
 
-See [SECURITY.md](../SECURITY.md) for responsible disclosure process.
+Report vulnerabilities privately through GitHub (Security > Report a vulnerability on StackingDAO/contracts), not in public issues.
 
 ---
 

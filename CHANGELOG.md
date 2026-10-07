@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Comprehensive documentation structure
-- CI/CD workflows for automated testing
-- Security policy and vulnerability reporting process
 
 ### Changed
 - Updated repository documentation

@@ -49,8 +49,8 @@ Thank you for your interest in contributing to StackingDAO! This document provid
 
 3. **Verify Setup**
    ```bash
-   clarinet --version
-   clarinet test
+   npm install
+   npm test
    ```
 
 ### Understanding the Codebase
@@ -91,16 +91,16 @@ git checkout -b fix/bug-description
 
 ```bash
 # Run all tests
-clarinet test
+npm test
 
-# Run specific test
-clarinet test tests/your-test_test.ts
+# Run one test file
+npx vitest run tests/core/your-feature_test.ts
 
 # Check contract syntax
 clarinet check
 
-# Generate coverage
-clarinet test --coverage
+# Coverage (lcov.info) and cost report
+npm run test:report
 ```
 
 ### 4. Commit Changes
@@ -303,30 +303,22 @@ All new code must include tests covering:
 ### Test Structure
 
 ```typescript
-// tests/feature_test.ts
-import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { assertEquals } from 'https://deno.land/std/testing/asserts.ts';
+// tests/core/feature_test.ts
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-Clarinet.test({
-  name: "Ensure deposit increases balance",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    const deployer = accounts.get('deployer')!;
-    const user1 = accounts.get('wallet_1')!;
-    
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        'stacking-dao-core-v3',
-        'deposit',
-        [types.uint(1000000)],
-        user1.address
-      )
-    ]);
-    
-    block.receipts[0].result.expectOk();
-    assertEquals(block.receipts[0].events.length, 2);
-  }
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+
+describe("ststx-token", () => {
+  it("returns the token symbol", () => {
+    const { result } = simnet.callReadOnlyFn("ststx-token", "get-symbol", [], deployer);
+    expect(result).toBeOk(Cl.stringAscii("stSTX"));
+  });
 });
 ```
+
+Tests run on the Clarinet SDK simnet through vitest (see `vitest.config.mjs`); the helpers in `tests/wrappers/` wrap the common contract calls.
 
 ### Minimum Coverage
 
@@ -338,7 +330,7 @@ Clarinet.test({
 
 ### Before Submitting
 
-- [ ] Tests pass: `clarinet test`
+- [ ] Tests pass: `npm test`
 - [ ] Contracts check: `clarinet check`
 - [ ] Code follows style guide
 - [ ] Documentation updated
@@ -401,7 +393,7 @@ For changes affecting:
 
 **DO NOT** create public issues for security vulnerabilities.
 
-See [SECURITY.md](SECURITY.md) for responsible disclosure process.
+Report vulnerabilities privately through GitHub (Security > Report a vulnerability), not in public issues.
 
 ## Questions?
 
