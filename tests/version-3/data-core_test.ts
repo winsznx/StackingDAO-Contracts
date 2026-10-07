@@ -1,291 +1,195 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { DataCore, DataCoreV2 } from "../wrappers/data-core-helpers.ts";
-import { Core } from "../wrappers/stacking-dao-core-helpers.ts";
-import { CoreV1 } from "../wrappers/stacking-dao-core-helpers.ts";
+import {
+  mineEmptyBlockUntil,
+  qualifiedName,
+  tupleField,
+  uintWithDecimals,
+} from "../wrappers/tests-utils";
+import { DataCore, DataCoreV2 } from "../wrappers/data-core-helpers";
+import { Core, CoreV1 } from "../wrappers/stacking-dao-core-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
 
 //-------------------------------------
 // Protocol
 //-------------------------------------
 
-Clarinet.test({
-  name: "data-core-v2: STX per stSTX",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+describe("data-core", () => {
+  it("data-core-v2: STX per stSTX", () => {
+    const dataCore = new DataCoreV2(deployer);
+    const core = new Core(deployer);
 
-    let dataCore = new DataCoreV2(chain, deployer);
-    let core = new Core(chain, deployer);
+    expect(core.deposit(wallet_1, 1000, undefined, qualifiedName("stacking-pool-v1"))).toBeOk(uintWithDecimals(1000));
 
-    let result = await core.deposit(
-      wallet_1,
-      1000,
-      undefined,
-      qualifiedName("stacking-pool-v1")
-    );
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(dataCore.getStxPerStStx(qualifiedName("reserve-v1"))).toBeOk(uintWithDecimals(1));
 
-    let call = await dataCore.getStxPerStStx(qualifiedName("reserve-v1"));
-    call.result.expectOk().expectUintWithDecimals(1);
+    expect(dataCore.getStxPerStStxHelper(1000)).toBeUint(uintWithDecimals(1).value);
 
-    call = await dataCore.getStxPerStStxHelper(1000);
-    call.result.expectUintWithDecimals(1);
+    expect(simnet.transferSTX(100 * 1_000_000, qualifiedName("reserve-v1"), deployer).result).toBeOk(Cl.bool(true));
 
-    let block = chain.mineBlock([
-      Tx.transferSTX(
-        100 * 1000000,
-        qualifiedName("reserve-v1"),
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(dataCore.getStxPerStStx(qualifiedName("reserve-v1"))).toBeOk(uintWithDecimals(1.1));
 
-    call = await dataCore.getStxPerStStx(qualifiedName("reserve-v1"));
-    call.result.expectOk().expectUintWithDecimals(1.1);
+    expect(dataCore.getStxPerStStxHelper(1100)).toBeUint(uintWithDecimals(1.1).value);
+  });
 
-    call = await dataCore.getStxPerStStxHelper(1100);
-    call.result.expectUintWithDecimals(1.1);
-  },
-});
+  it("data-core: protocol can set withdraw offset", () => {
+    const dataCore = new DataCore(deployer);
 
-Clarinet.test({
-  name: "data-core: protocol can set withdraw offset",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(dataCore.getCycleWithdrawOffset()).toBeUint(10);
 
-    let dataCore = new DataCore(chain, deployer);
+    expect(dataCore.setCycleWithdrawOffset(deployer, 8)).toBeOk(Cl.bool(true));
 
-    let call = await dataCore.getCycleWithdrawOffset();
-    call.result.expectUint(10);
+    expect(dataCore.getCycleWithdrawOffset()).toBeUint(8);
+  });
 
-    let result = dataCore.setCycleWithdrawOffset(deployer, 8);
-    result.expectOk().expectBool(true);
+  it("data-core: protocol can set withdraw nft", () => {
+    const dataCore = new DataCore(deployer);
 
-    call = await dataCore.getCycleWithdrawOffset();
-    call.result.expectUint(8);
-  },
-});
+    let info = dataCore.getWithdrawalsByNft(5);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(info, "ststx-amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(0);
 
-Clarinet.test({
-  name: "data-core: protocol can set withdraw nft",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(dataCore.setWithdrawalsByNft(deployer, 5, 100, 99, 30)).toBeOk(Cl.bool(true));
 
-    let dataCore = new DataCore(chain, deployer);
+    info = dataCore.getWithdrawalsByNft(5);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(100).value);
+    expect(tupleField(info, "ststx-amount")).toBeUint(uintWithDecimals(99).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(30);
+  });
 
-    let call = await dataCore.getWithdrawalsByNft(5);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["ststx-amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(0);
+  it("data-core-v2: protocol can set ststxbtc withdraw nft", () => {
+    const dataCore = new DataCoreV2(deployer);
 
-    let result = dataCore.setWithdrawalsByNft(deployer, 5, 100, 99, 30);
-    result.expectOk().expectBool(true);
+    let info = dataCore.getStStxBtcWithdrawalsByNft(5);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(0);
 
-    call = await dataCore.getWithdrawalsByNft(5);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(100);
-    call.result.expectTuple()["ststx-amount"].expectUintWithDecimals(99);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(30);
-  },
-});
+    expect(dataCore.setStStxBtcWithdrawalsByNft(deployer, 5, 100, 30)).toBeOk(Cl.bool(true));
 
-Clarinet.test({
-  name: "data-core-v2: protocol can set ststxbtc withdraw nft",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    info = dataCore.getStStxBtcWithdrawalsByNft(5);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(100).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(30);
+  });
 
-    let dataCore = new DataCoreV2(chain, deployer);
+  it("data-core: protocol can delete withdraw nft", () => {
+    const dataCore = new DataCore(deployer);
 
-    let call = await dataCore.getStStxBtcWithdrawalsByNft(5);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(0);
+    expect(dataCore.setWithdrawalsByNft(deployer, 5, 100, 99, 30)).toBeOk(Cl.bool(true));
 
-    let result = dataCore.setStStxBtcWithdrawalsByNft(deployer, 5, 100, 30);
-    result.expectOk().expectBool(true);
+    let info = dataCore.getWithdrawalsByNft(5);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(100).value);
+    expect(tupleField(info, "ststx-amount")).toBeUint(uintWithDecimals(99).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(30);
 
-    call = await dataCore.getStStxBtcWithdrawalsByNft(5);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(100);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(30);
-  },
-});
+    expect(dataCore.deleteWithdrawalsByNft(deployer, 5)).toBeOk(Cl.bool(true));
 
-Clarinet.test({
-  name: "data-core: protocol can delete withdraw nft",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    info = dataCore.getWithdrawalsByNft(5);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(info, "ststx-amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(0);
+  });
 
-    let dataCore = new DataCore(chain, deployer);
+  it("data-core-v2: protocol can delete ststxbtc withdraw nft", () => {
+    const dataCore = new DataCoreV2(deployer);
 
-    let result = dataCore.setWithdrawalsByNft(deployer, 5, 100, 99, 30);
-    result.expectOk().expectBool(true);
+    expect(dataCore.setStStxBtcWithdrawalsByNft(deployer, 5, 100, 30)).toBeOk(Cl.bool(true));
 
-    let call = await dataCore.getWithdrawalsByNft(5);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(100);
-    call.result.expectTuple()["ststx-amount"].expectUintWithDecimals(99);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(30);
+    let info = dataCore.getStStxBtcWithdrawalsByNft(5);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(100).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(30);
 
-    result = dataCore.deleteWithdrawalsByNft(deployer, 5);
-    result.expectOk().expectBool(true);
+    expect(dataCore.deleteStStxBtcWWithdrawalsByNft(deployer, 5)).toBeOk(Cl.bool(true));
 
-    call = await dataCore.getWithdrawalsByNft(5);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["ststx-amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(0);
-  },
-});
+    info = dataCore.getStStxBtcWithdrawalsByNft(5);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(0);
+  });
 
-Clarinet.test({
-  name: "data-core-v2: protocol can delete ststxbtc withdraw nft",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("data-core: protocol can set withdraw inset", () => {
+    const dataCore = new DataCoreV2(deployer);
 
-    let dataCore = new DataCoreV2(chain, deployer);
+    expect(dataCore.getCycleWithdrawInset()).toBeUint(3);
 
-    let result = dataCore.setStStxBtcWithdrawalsByNft(deployer, 5, 100, 30);
-    result.expectOk().expectBool(true);
+    expect(dataCore.setCycleWithdrawInset(deployer, 8)).toBeOk(Cl.bool(true));
 
-    let call = await dataCore.getStStxBtcWithdrawalsByNft(5);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(100);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(30);
+    expect(dataCore.getCycleWithdrawInset()).toBeUint(8);
+  });
 
-    result = dataCore.deleteStStxBtcWWithdrawalsByNft(deployer, 5);
-    result.expectOk().expectBool(true);
+  it("data-core-v2: protocol can update stx idle", () => {
+    const dataCore = new DataCoreV2(deployer);
 
-    call = await dataCore.getStStxBtcWithdrawalsByNft(5);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(0);
-  },
-});
+    expect(dataCore.getStxIdle(5)).toBeUint(uintWithDecimals(0).value);
 
-Clarinet.test({
-  name: "data-core: protocol can set withdraw inset",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(dataCore.setStxIdle(deployer, 5, 100)).toBeOk(Cl.bool(true));
 
-    let dataCore = new DataCoreV2(chain, deployer);
+    expect(dataCore.getStxIdle(5)).toBeUint(uintWithDecimals(100).value);
 
-    let call = await dataCore.getCycleWithdrawInset();
-    call.result.expectUint(3);
+    expect(dataCore.increaseStxIdle(deployer, 5, 10)).toBeOk(Cl.bool(true));
 
-    let result = dataCore.setCycleWithdrawInset(deployer, 8);
-    result.expectOk().expectBool(true);
+    expect(dataCore.getStxIdle(5)).toBeUint(uintWithDecimals(100 + 10).value);
 
-    call = await dataCore.getCycleWithdrawInset();
-    call.result.expectUint(8);
-  },
-});
+    expect(dataCore.decreaseStxIdle(deployer, 5, 20)).toBeOk(Cl.bool(true));
 
-Clarinet.test({
-  name: "data-core-v2: protocol can update stx idle",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(dataCore.getStxIdle(5)).toBeUint(uintWithDecimals(100 + 10 - 20).value);
+  });
 
-    let dataCore = new DataCoreV2(chain, deployer);
+  //-------------------------------------
+  // Withdrawal NFT V1
+  //-------------------------------------
 
-    let call = await dataCore.getStxIdle(5);
-    call.result.expectUintWithDecimals(0);
+  it("data-core: can get legacy withdrawal info", () => {
+    const dataCore = new DataCore(deployer);
+    const coreV1 = new CoreV1(deployer);
 
-    let result = await dataCore.setStxIdle(deployer, 5, 100);
-    result.expectOk().expectBool(true);
+    expect(coreV1.deposit(wallet_1, 1000, undefined)).toBeOk(uintWithDecimals(1000));
 
-    call = await dataCore.getStxIdle(5);
-    call.result.expectUintWithDecimals(100);
+    expect(coreV1.initWithdraw(wallet_1, 800)).toBeOk(uintWithDecimals(0));
 
-    result = await dataCore.increaseStxIdle(deployer, 5, 10);
-    result.expectOk().expectBool(true);
+    let info = dataCore.getWithdrawalsByNft(0);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(800).value);
+    expect(tupleField(info, "ststx-amount")).toBeUint(uintWithDecimals(800).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(21);
 
-    call = await dataCore.getStxIdle(5);
-    call.result.expectUintWithDecimals(100 + 10);
-
-    result = await dataCore.decreaseStxIdle(deployer, 5, 20);
-    result.expectOk().expectBool(true);
-
-    call = await dataCore.getStxIdle(5);
-    call.result.expectUintWithDecimals(100 + 10 - 20);
-  },
-});
-
-//-------------------------------------
-// Withdrawal NFT V1
-//-------------------------------------
-
-Clarinet.test({
-  name: "data-core: can get legacy withdrawal info",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let dataCore = new DataCore(chain, deployer);
-    let coreV1 = new CoreV1(chain, deployer);
-
-    let result = await coreV1.deposit(wallet_1, 1000, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = coreV1.initWithdraw(wallet_1, 800);
-    result.expectOk().expectUintWithDecimals(0);
-
-    let call = await dataCore.getWithdrawalsByNft(0);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(800);
-    call.result.expectTuple()["ststx-amount"].expectUintWithDecimals(800);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(21);
-
-    await chain.mineEmptyBlockUntil(26);
+    mineEmptyBlockUntil(26);
 
     // Old core
-    result = coreV1.withdraw(wallet_1, 0);
-    result.expectOk().expectUintWithDecimals(800);
+    expect(coreV1.withdraw(wallet_1, 0)).toBeOk(uintWithDecimals(800));
 
-    call = await dataCore.getWithdrawalsByNft(0);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["ststx-amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(0);
-  },
-});
+    info = dataCore.getWithdrawalsByNft(0);
+    expect(tupleField(info, "stx-amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(info, "ststx-amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(info, "unlock-burn-height")).toBeUint(0);
+  });
 
-//-------------------------------------
-// Access
-//-------------------------------------
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-Clarinet.test({
-  name: "data-core: only protocol can use setters",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("data-core: only protocol can use setters", () => {
+    const dataCore = new DataCore(deployer);
+    const dataCoreV2 = new DataCoreV2(deployer);
 
-    let dataCore = new DataCore(chain, deployer);
-    let dataCoreV2 = new DataCoreV2(chain, deployer);
+    expect(dataCore.setCycleWithdrawOffset(wallet_1, 8)).toBeErr(Cl.uint(20003));
 
-    let result = dataCore.setCycleWithdrawOffset(wallet_1, 8);
-    result.expectErr().expectUint(20003);
+    expect(dataCore.setWithdrawalsByNft(wallet_1, 5, 100, 99, 30)).toBeErr(Cl.uint(20003));
 
-    result = dataCore.setWithdrawalsByNft(wallet_1, 5, 100, 99, 30);
-    result.expectErr().expectUint(20003);
+    expect(dataCore.deleteWithdrawalsByNft(wallet_1, 5)).toBeErr(Cl.uint(20003));
 
-    result = dataCore.deleteWithdrawalsByNft(wallet_1, 5);
-    result.expectErr().expectUint(20003);
+    expect(dataCoreV2.setCycleWithdrawInset(wallet_1, 8)).toBeErr(Cl.uint(20003));
 
-    result = dataCoreV2.setCycleWithdrawInset(wallet_1, 8);
-    result.expectErr().expectUint(20003);
+    expect(dataCoreV2.setStStxBtcWithdrawalsByNft(wallet_1, 5, 100, 30)).toBeErr(Cl.uint(20003));
 
-    result = dataCoreV2.setStStxBtcWithdrawalsByNft(wallet_1, 5, 100, 30);
-    result.expectErr().expectUint(20003);
+    expect(dataCoreV2.deleteStStxBtcWWithdrawalsByNft(wallet_1, 5)).toBeErr(Cl.uint(20003));
 
-    result = dataCoreV2.deleteStStxBtcWWithdrawalsByNft(wallet_1, 5);
-    result.expectErr().expectUint(20003);
+    expect(dataCoreV2.setStxIdle(wallet_1, 1, 100)).toBeErr(Cl.uint(20003));
 
-    result = dataCoreV2.setStxIdle(wallet_1, 1, 100);
-    result.expectErr().expectUint(20003);
+    expect(dataCoreV2.increaseStxIdle(wallet_1, 1, 100)).toBeErr(Cl.uint(20003));
 
-    result = dataCoreV2.increaseStxIdle(wallet_1, 1, 100);
-    result.expectErr().expectUint(20003);
-
-    result = dataCoreV2.decreaseStxIdle(wallet_1, 1, 100);
-    result.expectErr().expectUint(20003);
-  },
+    expect(dataCoreV2.decreaseStxIdle(wallet_1, 1, 100)).toBeErr(Cl.uint(20003));
+  });
 });

@@ -1,98 +1,71 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // Fomo
 // ---------------------------------------------------------
 
-class Fomo {
-  chain: Chain;
-  deployer: Account;
+export class Fomo {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getCurrentWinner() {
-    return this.chain.callReadOnlyFn("fomo", "get-current-winner", [], this.deployer.address);
+  getCurrentWinner(): ClarityValue {
+    return simnet.callReadOnlyFn("fomo", "get-current-winner", [], this.deployer).result;
   }
 
-  getClaimCost() {
-    return this.chain.callReadOnlyFn("fomo", "get-claim-cost", [], this.deployer.address);
+  getClaimCost(): ClarityValue {
+    return simnet.callReadOnlyFn("fomo", "get-claim-cost", [], this.deployer).result;
   }
 
-  getIncrement() {
-    return this.chain.callReadOnlyFn("fomo", "get-increment", [], this.deployer.address);
+  getIncrement(): ClarityValue {
+    return simnet.callReadOnlyFn("fomo", "get-increment", [], this.deployer).result;
   }
 
-  hasGameEnded() {
-    return this.chain.callReadOnlyFn("fomo", "has-game-ended", [], this.deployer.address);
+  hasGameEnded(): ClarityValue {
+    return simnet.callReadOnlyFn("fomo", "has-game-ended", [], this.deployer).result;
   }
 
-  setClaimCost(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("fomo", "set-claim-cost", [
-        types.uint(amount * 1000000)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setClaimCost(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "fomo",
+      "set-claim-cost",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  setIncrement(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("fomo", "set-increment", [
-        types.uint(amount * 1000000)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setIncrement(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "fomo",
+      "set-increment",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  buyClaim(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("fomo", "buy-claim", [], caller.address)
-    ]);
-    return block.receipts[0].result;
+  buyClaim(caller: string): ClarityValue {
+    return simnet.callPublicFn("fomo", "buy-claim", [], caller).result;
   }
 
-  retrieveWinner(caller: Account, nftId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("fomo", "retrieve-winner", [
-        types.uint(nftId)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  retrieveWinner(caller: string, nftId: number): ClarityValue {
+    return simnet.callPublicFn("fomo", "retrieve-winner", [Cl.uint(nftId)], caller).result;
   }
 
-  retrieveLoser(caller: Account, nftId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("fomo", "retrieve-loser", [
-        types.uint(nftId)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  retrieveLoser(caller: string, nftId: number): ClarityValue {
+    return simnet.callPublicFn("fomo", "retrieve-loser", [Cl.uint(nftId)], caller).result;
   }
 
-  retrieveFees(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("fomo", "retrieve-fees", [], caller.address)
-    ]);
-    return block.receipts[0].result;
+  retrieveFees(caller: string): ClarityValue {
+    return simnet.callPublicFn("fomo", "retrieve-fees", [], caller).result;
   }
 
-  rescueFunds(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("fomo", "rescue-funds", [], caller.address)
-    ]);
-    return block.receipts[0].result;
+  rescueFunds(caller: string): ClarityValue {
+    return simnet.callPublicFn("fomo", "rescue-funds", [], caller).result;
   }
 
-  startGame(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("fomo", "start-game", [], caller.address)
-    ]);
-    return block.receipts[0].result;
+  startGame(caller: string): ClarityValue {
+    return simnet.callPublicFn("fomo", "start-game", [], caller).result;
   }
 }
-
-export { Fomo };

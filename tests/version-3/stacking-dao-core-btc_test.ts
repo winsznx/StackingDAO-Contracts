@@ -1,794 +1,481 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import {
-  qualifiedName,
-  REWARD_CYCLE_LENGTH,
-  PREPARE_PHASE_LENGTH,
-} from "../wrappers/tests-utils.ts";
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { CoreBtc as Core } from "../wrappers/stacking-dao-core-btc-helpers.ts";
-import { CoreV1 } from "../wrappers/stacking-dao-core-helpers.ts";
-import { DataCoreV2 as DataCore } from "../wrappers/data-core-helpers.ts";
-import { DataDirectStacking } from "../wrappers/data-direct-stacking-helpers.ts";
-import { Reserve } from "../wrappers/reserve-helpers.ts";
-import { StStxToken } from "../wrappers/ststx-token-helpers.ts";
-import { Rewards } from "../wrappers/rewards-helpers.ts";
-import { DataPools } from "../wrappers/data-pools-helpers.ts";
+import {
+  mineEmptyBlockUntil,
+  okValue,
+  qualifiedName,
+  someValue,
+  tupleField,
+  uintWithDecimals,
+} from "../wrappers/tests-utils";
+import { CoreBtc as Core } from "../wrappers/stacking-dao-core-btc-helpers";
+import { CoreV1 } from "../wrappers/stacking-dao-core-helpers";
+import { DataCoreV2 as DataCore } from "../wrappers/data-core-helpers";
+import { DataDirectStacking } from "../wrappers/data-direct-stacking-helpers";
+import { Reserve } from "../wrappers/reserve-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
 
 //-------------------------------------
 // Core
 //-------------------------------------
 
-Clarinet.test({
-  name: "core-btc: deposit and withdraw for normal stacking",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+describe("stacking-dao-core-btc", () => {
+  it("core-btc: deposit and withdraw for normal stacking", () => {
+    const core = new Core(deployer);
+    const dataCore = new DataCore(deployer);
+    const reserve = new Reserve(deployer);
 
-    let core = new Core(chain, deployer);
-    let dataCore = new DataCore(chain, deployer);
-    let reserve = new Reserve(chain, deployer);
+    expect(core.deposit(wallet_1, 1000, undefined, undefined)).toBeOk(uintWithDecimals(1000));
 
-    let result = await core.deposit(wallet_1, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(1000));
+    expect(reserve.getStxForWithdrawals()).toBeOk(uintWithDecimals(0));
 
-    let call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(1000);
-    call = await reserve.getStxForWithdrawals();
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(core.initWithdraw(wallet_1, 200)).toBeOk(Cl.uint(0));
 
-    result = await core.initWithdraw(wallet_1, 200);
-    result.expectOk().expectUint(0);
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(1000));
+    expect(reserve.getStxForWithdrawals()).toBeOk(uintWithDecimals(200));
 
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(1000);
-    call = await reserve.getStxForWithdrawals();
-    call.result.expectOk().expectUintWithDecimals(200);
+    let withdrawal = dataCore.getStStxBtcWithdrawalsByNft(0);
+    expect(tupleField(withdrawal, "stx-amount")).toBeUint(uintWithDecimals(200).value);
+    expect(tupleField(withdrawal, "unlock-burn-height")).toBeUint(24);
 
-    call = await dataCore.getStStxBtcWithdrawalsByNft(0);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(200);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(24);
+    mineEmptyBlockUntil(21 + 2 + 3);
 
-    chain.mineEmptyBlockUntil(21 + 2 + 3);
+    let result = okValue(core.withdraw(wallet_1, 0));
+    expect(tupleField(result, "stx-user-amount")).toBeUint(uintWithDecimals(200).value);
 
-    result = await core.withdraw(wallet_1, 0);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-user-amount"].expectUintWithDecimals(200);
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(800));
+    expect(reserve.getStxForWithdrawals()).toBeOk(uintWithDecimals(0));
+  });
 
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(800);
-    call = await reserve.getStxForWithdrawals();
-    call.result.expectOk().expectUintWithDecimals(0);
-  },
-});
+  it("core-btc: deposit and withdraw for direct stacking", () => {
+    const core = new Core(deployer);
+    const dataCore = new DataCore(deployer);
+    const dataDirectStacking = new DataDirectStacking(deployer);
+    const reserve = new Reserve(deployer);
 
-Clarinet.test({
-  name: "core-btc: deposit and withdraw for direct stacking",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    expect(core.deposit(wallet_1, 1000, undefined, qualifiedName("stacking-pool-v1"))).toBeOk(uintWithDecimals(1000));
 
-    let core = new Core(chain, deployer);
-    let dataCore = new DataCore(chain, deployer);
-    let dataDirectStacking = new DataDirectStacking(chain, deployer);
-    let reserve = new Reserve(chain, deployer);
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(1000));
+    expect(reserve.getStxForWithdrawals()).toBeOk(uintWithDecimals(0));
 
-    let result = await core.deposit(
-      wallet_1,
-      1000,
-      undefined,
-      qualifiedName("stacking-pool-v1")
-    );
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(dataDirectStacking.getTotalDirectStacking()).toBeUint(uintWithDecimals(1000).value);
+    expect(dataDirectStacking.getDirectStackingPoolAmount(qualifiedName("stacking-pool-v1"))).toBeUint(uintWithDecimals(1000).value);
+    let user = someValue(dataDirectStacking.getDirectStackingUser(wallet_1));
+    expect(tupleField(user, "amount")).toBeUint(uintWithDecimals(1000).value);
+    expect(tupleField(user, "pool")).toBePrincipal(qualifiedName("stacking-pool-v1"));
 
-    let call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(1000);
-    call = await reserve.getStxForWithdrawals();
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(core.initWithdraw(wallet_1, 200)).toBeOk(Cl.uint(0));
 
-    call = await dataDirectStacking.getTotalDirectStacking();
-    call.result.expectUintWithDecimals(1000);
-    call = await dataDirectStacking.getDirectStackingPoolAmount(
-      qualifiedName("stacking-pool-v1")
-    );
-    call.result.expectUintWithDecimals(1000);
-    call = await dataDirectStacking.getDirectStackingUser(wallet_1.address);
-    call.result
-      .expectSome()
-      .expectTuple()
-      ["amount"].expectUintWithDecimals(1000);
-    call.result
-      .expectSome()
-      .expectTuple()
-      ["pool"].expectPrincipal(qualifiedName("stacking-pool-v1"));
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(1000));
+    expect(reserve.getStxForWithdrawals()).toBeOk(uintWithDecimals(200));
 
-    result = await core.initWithdraw(wallet_1, 200);
-    result.expectOk().expectUint(0);
+    expect(dataDirectStacking.getTotalDirectStacking()).toBeUint(uintWithDecimals(800).value);
+    expect(dataDirectStacking.getDirectStackingPoolAmount(qualifiedName("stacking-pool-v1"))).toBeUint(uintWithDecimals(800).value);
+    user = someValue(dataDirectStacking.getDirectStackingUser(wallet_1));
+    expect(tupleField(user, "amount")).toBeUint(uintWithDecimals(800).value);
+    expect(tupleField(user, "pool")).toBePrincipal(qualifiedName("stacking-pool-v1"));
 
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(1000);
-    call = await reserve.getStxForWithdrawals();
-    call.result.expectOk().expectUintWithDecimals(200);
+    let withdrawal = dataCore.getStStxBtcWithdrawalsByNft(0);
+    expect(tupleField(withdrawal, "stx-amount")).toBeUint(uintWithDecimals(200).value);
+    expect(tupleField(withdrawal, "unlock-burn-height")).toBeUint(24);
 
-    call = await dataDirectStacking.getTotalDirectStacking();
-    call.result.expectUintWithDecimals(800);
-    call = await dataDirectStacking.getDirectStackingPoolAmount(
-      qualifiedName("stacking-pool-v1")
-    );
-    call.result.expectUintWithDecimals(800);
-    call = await dataDirectStacking.getDirectStackingUser(wallet_1.address);
-    call.result
-      .expectSome()
-      .expectTuple()
-      ["amount"].expectUintWithDecimals(800);
-    call.result
-      .expectSome()
-      .expectTuple()
-      ["pool"].expectPrincipal(qualifiedName("stacking-pool-v1"));
+    mineEmptyBlockUntil(21 + 2 + 3);
 
-    call = await dataCore.getStStxBtcWithdrawalsByNft(0);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(200);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(24);
+    let result = okValue(core.withdraw(wallet_1, 0));
+    expect(tupleField(result, "stx-user-amount")).toBeUint(uintWithDecimals(200).value);
 
-    chain.mineEmptyBlockUntil(21 + 2 + 3);
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(800));
+    expect(reserve.getStxForWithdrawals()).toBeOk(uintWithDecimals(0));
 
-    result = await core.withdraw(wallet_1, 0);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-user-amount"].expectUintWithDecimals(200);
+    expect(dataDirectStacking.getTotalDirectStacking()).toBeUint(uintWithDecimals(800).value);
+    expect(dataDirectStacking.getDirectStackingPoolAmount(qualifiedName("stacking-pool-v1"))).toBeUint(uintWithDecimals(800).value);
+    user = someValue(dataDirectStacking.getDirectStackingUser(wallet_1));
+    expect(tupleField(user, "amount")).toBeUint(uintWithDecimals(800).value);
+    expect(tupleField(user, "pool")).toBePrincipal(qualifiedName("stacking-pool-v1"));
+  });
 
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(800);
-    call = await reserve.getStxForWithdrawals();
-    call.result.expectOk().expectUintWithDecimals(0);
+  it("core-btc: withdraw at end of cycle", () => {
+    const core = new Core(deployer);
+    const dataCore = new DataCore(deployer);
 
-    call = await dataDirectStacking.getTotalDirectStacking();
-    call.result.expectUintWithDecimals(800);
-    call = await dataDirectStacking.getDirectStackingPoolAmount(
-      qualifiedName("stacking-pool-v1")
-    );
-    call.result.expectUintWithDecimals(800);
-    call = await dataDirectStacking.getDirectStackingUser(wallet_1.address);
-    call.result
-      .expectSome()
-      .expectTuple()
-      ["amount"].expectUintWithDecimals(800);
-    call.result
-      .expectSome()
-      .expectTuple()
-      ["pool"].expectPrincipal(qualifiedName("stacking-pool-v1"));
-  },
-});
+    expect(core.deposit(wallet_1, 1000, undefined, undefined)).toBeOk(uintWithDecimals(1000));
 
-Clarinet.test({
-  name: "core-btc: withdraw at end of cycle",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    mineEmptyBlockUntil(19);
 
-    let core = new Core(chain, deployer);
-    let dataCore = new DataCore(chain, deployer);
+    expect(core.initWithdraw(wallet_1, 200)).toBeOk(Cl.uint(0));
 
-    let result = await core.deposit(wallet_1, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
+    let withdrawal = dataCore.getStStxBtcWithdrawalsByNft(0);
+    expect(tupleField(withdrawal, "stx-amount")).toBeUint(uintWithDecimals(200).value);
+    expect(tupleField(withdrawal, "unlock-burn-height")).toBeUint(45);
 
-    chain.mineEmptyBlockUntil(19);
+    mineEmptyBlockUntil(21 * 2 + 2 + 3);
 
-    result = await core.initWithdraw(wallet_1, 200);
-    result.expectOk().expectUint(0);
+    let result = okValue(core.withdraw(wallet_1, 0));
+    expect(tupleField(result, "stx-user-amount")).toBeUint(uintWithDecimals(200).value);
+  });
 
-    let call = await dataCore.getStStxBtcWithdrawalsByNft(0);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(200);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(45);
+  it("core-btc: stack/unstack fee", () => {
+    const core = new Core(deployer);
+    const dataCore = new DataCore(deployer);
+    const coreV1 = new CoreV1(deployer);
 
-    chain.mineEmptyBlockUntil(21 * 2 + 2 + 3);
-
-    result = await core.withdraw(wallet_1, 0);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-user-amount"].expectUintWithDecimals(200);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: stack/unstack fee",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-    let dataCore = new DataCore(chain, deployer);
-    let stStxToken = new StStxToken(chain, deployer);
-    let coreV1 = new CoreV1(chain, deployer);
-
-    let result = await core.setStackFee(deployer, 500);
-    result.expectOk().expectBool(true);
-
-    result = await core.setUnstackFee(deployer, 500);
-    result.expectOk().expectBool(true);
+    expect(core.setStackFee(deployer, 500)).toBeOk(Cl.bool(true));
+    expect(core.setUnstackFee(deployer, 500)).toBeOk(Cl.bool(true));
 
     // 1000 minus 5% fee
-    result = await core.deposit(wallet_1, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(950);
+    expect(core.deposit(wallet_1, 1000, undefined, undefined)).toBeOk(uintWithDecimals(950));
 
-    let call = coreV1.getStxBalance(qualifiedName("commission-v2"));
-    call.result.expectUintWithDecimals(50);
+    expect(coreV1.getStxBalance(qualifiedName("commission-v2"))).toBeUint(uintWithDecimals(50).value);
 
-    chain.mineEmptyBlockUntil(19);
+    mineEmptyBlockUntil(19);
 
-    result = await core.initWithdraw(wallet_1, 200);
-    result.expectOk().expectUint(0);
+    expect(core.initWithdraw(wallet_1, 200)).toBeOk(Cl.uint(0));
 
-    call = await dataCore.getStStxBtcWithdrawalsByNft(0);
-    call.result.expectTuple()["stx-amount"].expectUintWithDecimals(200);
-    call.result.expectTuple()["unlock-burn-height"].expectUint(45);
+    let withdrawal = dataCore.getStStxBtcWithdrawalsByNft(0);
+    expect(tupleField(withdrawal, "stx-amount")).toBeUint(uintWithDecimals(200).value);
+    expect(tupleField(withdrawal, "unlock-burn-height")).toBeUint(45);
 
-    chain.mineEmptyBlockUntil(21 * 2 + 2 + 3);
+    mineEmptyBlockUntil(21 * 2 + 2 + 3);
 
-    result = await core.withdraw(wallet_1, 0);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-user-amount"].expectUintWithDecimals(190);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-fee-amount"].expectUintWithDecimals(10);
+    let result = okValue(core.withdraw(wallet_1, 0));
+    expect(tupleField(result, "stx-user-amount")).toBeUint(uintWithDecimals(190).value);
+    expect(tupleField(result, "stx-fee-amount")).toBeUint(uintWithDecimals(10).value);
 
     // 200 * 5% = 10
     // Already had 50 from deposit
-    call = coreV1.getStxBalance(qualifiedName("commission-v2"));
-    call.result.expectUintWithDecimals(50 + 10);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: withdraw idle stx with fee",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-    let coreV1 = new CoreV1(chain, deployer);
-    let dataCore = new DataCore(chain, deployer);
-    let reserve = new Reserve(chain, deployer);
-
-    let result = await core.setWithdrawIdleFee(deployer, 500);
-    result.expectOk().expectBool(true);
-
-    result = await core.deposit(deployer, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    let call = await core.getIdleCycle();
-    call.result.expectOk().expectUint(0);
-
-    call = await dataCore.getStxIdle(0);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(1000);
-
-    chain.mineEmptyBlockUntil(23);
-
-    result = await core.deposit(wallet_1, 200, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(200);
-
-    call = await core.getIdleCycle();
-    call.result.expectOk().expectUint(1);
-
-    call = await dataCore.getStxIdle(1);
-    result.expectOk().expectUintWithDecimals(200);
-
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(1000 + 200);
-
-    result = await core.withdrawIdle(deployer, 200);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-user-amount"].expectUintWithDecimals(190);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-fee-amount"].expectUintWithDecimals(10);
-
-    call = await dataCore.getStxIdle(1);
-    call.result.expectUintWithDecimals(0);
-
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(1000);
-
-    call = coreV1.getStxBalance(qualifiedName("commission-v2"));
-    call.result.expectUintWithDecimals(10);
-  },
-});
-
-//-------------------------------------
-// Admin
-//-------------------------------------
-
-Clarinet.test({
-  name: "core-btc: admin can shutdown deposits",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-
-    let result = await core.deposit(
-      wallet_1,
-      1000,
-      undefined,
-      qualifiedName("stacking-pool-v1")
-    );
-    result.expectOk().expectUintWithDecimals(1000);
-
-    let call = await core.getShutdownDeposits();
-    call.result.expectBool(false);
-
-    result = await core.setShutdownDeposits(deployer, true);
-    result.expectOk().expectBool(true);
-
-    call = await core.getShutdownDeposits();
-    call.result.expectBool(true);
-
-    result = await core.deposit(
-      wallet_1,
-      1000,
-      undefined,
-      qualifiedName("stacking-pool-v1")
-    );
-    result.expectErr().expectUint(204002);
-
-    result = await core.setShutdownDeposits(deployer, false);
-    result.expectOk().expectBool(true);
-
-    call = await core.getShutdownDeposits();
-    call.result.expectBool(false);
-
-    result = await core.deposit(
-      wallet_1,
-      1000,
-      undefined,
-      qualifiedName("stacking-pool-v1")
-    );
-    result.expectOk().expectUintWithDecimals(1000);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: admin can shutdown withdraw idle",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-    let dataCore = new DataCore(chain, deployer);
-
-    chain.mineEmptyBlockUntil(19);
-
-    let result = await core.deposit(
-      wallet_1,
-      1000,
-      undefined,
-      qualifiedName("stacking-pool-v1")
-    );
-    result.expectOk().expectUintWithDecimals(1000);
-
-    let call = await core.getShutdownWithdrawIdle();
-    call.result.expectBool(false);
+    expect(coreV1.getStxBalance(qualifiedName("commission-v2"))).toBeUint(uintWithDecimals(50 + 10).value);
+  });
 
-    result = await core.setShutdownWithdrawIdle(deployer, true);
-    result.expectOk().expectBool(true);
+  it("core-btc: withdraw idle stx with fee", () => {
+    const core = new Core(deployer);
+    const coreV1 = new CoreV1(deployer);
+    const dataCore = new DataCore(deployer);
+    const reserve = new Reserve(deployer);
 
-    call = await core.getShutdownWithdrawIdle();
-    call.result.expectBool(true);
-
-    result = await core.withdrawIdle(wallet_1, 10);
-    result.expectErr().expectUint(204002);
-
-    result = await core.setShutdownWithdrawIdle(deployer, false);
-    result.expectOk().expectBool(true);
-
-    call = await core.getShutdownWithdrawIdle();
-    call.result.expectBool(false);
-
-    result = await core.withdrawIdle(wallet_1, 10);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-user-amount"].expectUintWithDecimals(9.9);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: admin can shutdown init withdraws",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
+    expect(core.setWithdrawIdleFee(deployer, 500)).toBeOk(Cl.bool(true));
 
-    let result = await core.deposit(
-      wallet_1,
-      1000,
-      undefined,
-      qualifiedName("stacking-pool-v1")
-    );
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(core.deposit(deployer, 1000, undefined, undefined)).toBeOk(uintWithDecimals(1000));
 
-    let call = await core.getShutdownInitWithdraw();
-    call.result.expectBool(false);
-
-    result = await core.setShutdownInitWithdraw(deployer, true);
-    result.expectOk().expectBool(true);
-
-    call = await core.getShutdownInitWithdraw();
-    call.result.expectBool(true);
+    expect(core.getIdleCycle()).toBeOk(Cl.uint(0));
 
-    result = await core.initWithdraw(wallet_1, 1000);
-    result.expectErr().expectUint(204002);
-
-    result = await core.setShutdownInitWithdraw(deployer, false);
-    result.expectOk().expectBool(true);
-
-    call = await core.getShutdownInitWithdraw();
-    call.result.expectBool(false);
-
-    result = await core.initWithdraw(wallet_1, 1000);
-    result.expectOk().expectUint(0);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: admin can shutdown withdraws",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-
-    let result = await core.deposit(
-      wallet_1,
-      1000,
-      undefined,
-      qualifiedName("stacking-pool-v1")
-    );
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.initWithdraw(wallet_1, 1000);
-    result.expectOk().expectUint(0);
-
-    chain.mineEmptyBlockUntil(21 + 4);
-
-    let call = await core.getShutdownWithdraw();
-    call.result.expectBool(false);
-
-    result = await core.setShutdownWithdraw(deployer, true);
-    result.expectOk().expectBool(true);
-
-    call = await core.getShutdownWithdraw();
-    call.result.expectBool(true);
-
-    result = await core.withdraw(wallet_1, 0);
-    result.expectErr().expectUint(204002);
-
-    result = await core.setShutdownWithdraw(deployer, false);
-    result.expectOk().expectBool(true);
-
-    call = await core.getShutdownWithdraw();
-    call.result.expectBool(false);
-
-    result = await core.withdraw(wallet_1, 0);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-user-amount"].expectUintWithDecimals(1000);
-  },
-});
-
-//-------------------------------------
-// Access
-//-------------------------------------
-
-Clarinet.test({
-  name: "core-btc: only protocol can call admin methods",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-
-    let result = await core.setShutdownDeposits(wallet_1, true);
-    result.expectErr().expectUint(20003);
-
-    result = await core.setShutdownInitWithdraw(wallet_1, true);
-    result.expectErr().expectUint(20003);
-
-    result = await core.setShutdownWithdraw(wallet_1, true);
-    result.expectErr().expectUint(20003);
-
-    result = await core.setStackFee(wallet_1, 100);
-    result.expectErr().expectUint(20003);
-
-    result = await core.setUnstackFee(wallet_1, 100);
-    result.expectErr().expectUint(20003);
-  },
-});
-
-//-------------------------------------
-// Errors
-//-------------------------------------
-
-Clarinet.test({
-  name: "core-btc: can not call deposit with wrong trait params",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v1",
-        "deposit",
-        [
-          types.principal(qualifiedName("fake-reserve")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.principal(qualifiedName("direct-helpers-v2")),
-          types.uint(100 * 1000000),
-          types.none(),
-          types.none(),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
-
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v1",
-        "deposit",
-        [
-          types.principal(qualifiedName("reserve-v1")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.principal(qualifiedName("fake-direct-helpers")),
-          types.uint(100 * 1000000),
-          types.none(),
-          types.none(),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: can not call withdraw idle with wrong trait params",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v1",
-        "withdraw-idle",
-        [
-          types.principal(qualifiedName("fake-reserve")),
-          types.principal(qualifiedName("direct-helpers-v2")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.uint(100 * 1000000),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
-
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v1",
-        "withdraw-idle",
-        [
-          types.principal(qualifiedName("reserve-v1")),
-          types.principal(qualifiedName("fake-direct-helpers")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.uint(100 * 1000000),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: can not call init-withdraw with wrong trait params",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v1",
-        "init-withdraw",
-        [
-          types.principal(qualifiedName("fake-reserve")),
-          types.principal(qualifiedName("direct-helpers-v2")),
-          types.uint(100 * 1000000),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
-
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v1",
-        "init-withdraw",
-        [
-          types.principal(qualifiedName("reserve-v1")),
-          types.principal(qualifiedName("fake-direct-helpers")),
-          types.uint(100 * 1000000),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: can not call withdraw with wrong trait params",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v1",
-        "withdraw",
-        [
-          types.principal(qualifiedName("fake-reserve")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.uint(0),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: can only withdraw idle if enough deposited",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-
-    let result = await core.deposit(wallet_1, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.withdrawIdle(wallet_1, 1000 + 1);
-    result.expectErr().expectUint(204006);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: can only withdraw if burn block height reached",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-
-    let result = await core.deposit(wallet_1, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.initWithdraw(wallet_1, 200);
-    result.expectOk().expectUint(0);
-
-    chain.mineEmptyBlockUntil(21);
-
-    result = await core.withdraw(wallet_1, 0);
-    result.expectErr().expectUint(204001);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: only withdrawal NFT owner can withdraw",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-
-    let result = await core.deposit(deployer, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.deposit(wallet_1, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.initWithdraw(deployer, 200);
-    result.expectOk().expectUint(0);
-
-    result = await core.initWithdraw(wallet_1, 200);
-    result.expectOk().expectUint(1);
-
-    chain.mineEmptyBlockUntil(21 + 4);
-
-    result = await core.withdraw(wallet_1, 0);
-    result.expectErr().expectUint(204003);
-
-    result = await core.withdraw(deployer, 0);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-user-amount"].expectUintWithDecimals(200);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: can only use existing NFT to withdraw",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-
-    let result = await core.deposit(deployer, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.deposit(wallet_1, 1000, undefined, undefined);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.initWithdraw(deployer, 200);
-    result.expectOk().expectUint(0);
-
-    result = await core.initWithdraw(wallet_1, 200);
-    result.expectOk().expectUint(1);
-
-    chain.mineEmptyBlockUntil(21 + 3 + 3);
-
-    result = await core.withdraw(wallet_1, 1);
-    result
-      .expectOk()
-      .expectTuple()
-      ["stx-user-amount"].expectUintWithDecimals(200);
-
-    result = await core.withdraw(wallet_1, 1);
-    result.expectErr().expectUint(204004);
-
-    result = await core.withdraw(wallet_1, 99);
-    result.expectErr().expectUint(204004);
-  },
-});
-
-Clarinet.test({
-  name: "core-btc: can not set fee higher than 10000 BPS",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let core = new Core(chain, deployer);
-
-    let result = await core.setStackFee(deployer, 10001);
-    result.expectErr().expectUint(204007);
-
-    result = await core.setUnstackFee(deployer, 10001);
-    result.expectErr().expectUint(204007);
-
-    result = await core.setWithdrawIdleFee(deployer, 10001);
-    result.expectErr().expectUint(204007);
-  },
+    expect(dataCore.getStxIdle(0)).toBeUint(uintWithDecimals(1000).value);
+
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(1000));
+
+    mineEmptyBlockUntil(23);
+
+    expect(core.deposit(wallet_1, 200, undefined, undefined)).toBeOk(uintWithDecimals(200));
+
+    expect(core.getIdleCycle()).toBeOk(Cl.uint(1));
+
+    expect(dataCore.getStxIdle(1)).toBeUint(uintWithDecimals(200).value);
+
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(1000 + 200));
+
+    let result = okValue(core.withdrawIdle(deployer, 200));
+    expect(tupleField(result, "stx-user-amount")).toBeUint(uintWithDecimals(190).value);
+    expect(tupleField(result, "stx-fee-amount")).toBeUint(uintWithDecimals(10).value);
+
+    expect(dataCore.getStxIdle(1)).toBeUint(uintWithDecimals(0).value);
+
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(1000));
+
+    expect(coreV1.getStxBalance(qualifiedName("commission-v2"))).toBeUint(uintWithDecimals(10).value);
+  });
+
+  //-------------------------------------
+  // Admin
+  //-------------------------------------
+
+  it("core-btc: admin can shutdown deposits", () => {
+    const core = new Core(deployer);
+
+    expect(core.deposit(wallet_1, 1000, undefined, qualifiedName("stacking-pool-v1"))).toBeOk(uintWithDecimals(1000));
+
+    expect(core.getShutdownDeposits()).toBeBool(false);
+
+    expect(core.setShutdownDeposits(deployer, true)).toBeOk(Cl.bool(true));
+
+    expect(core.getShutdownDeposits()).toBeBool(true);
+
+    expect(core.deposit(wallet_1, 1000, undefined, qualifiedName("stacking-pool-v1"))).toBeErr(Cl.uint(204002));
+
+    expect(core.setShutdownDeposits(deployer, false)).toBeOk(Cl.bool(true));
+
+    expect(core.getShutdownDeposits()).toBeBool(false);
+
+    expect(core.deposit(wallet_1, 1000, undefined, qualifiedName("stacking-pool-v1"))).toBeOk(uintWithDecimals(1000));
+  });
+
+  it("core-btc: admin can shutdown withdraw idle", () => {
+    const core = new Core(deployer);
+
+    mineEmptyBlockUntil(19);
+
+    expect(core.deposit(wallet_1, 1000, undefined, qualifiedName("stacking-pool-v1"))).toBeOk(uintWithDecimals(1000));
+
+    expect(core.getShutdownWithdrawIdle()).toBeBool(false);
+
+    expect(core.setShutdownWithdrawIdle(deployer, true)).toBeOk(Cl.bool(true));
+
+    expect(core.getShutdownWithdrawIdle()).toBeBool(true);
+
+    expect(core.withdrawIdle(wallet_1, 10)).toBeErr(Cl.uint(204002));
+
+    expect(core.setShutdownWithdrawIdle(deployer, false)).toBeOk(Cl.bool(true));
+
+    expect(core.getShutdownWithdrawIdle()).toBeBool(false);
+
+    let result = okValue(core.withdrawIdle(wallet_1, 10));
+    expect(tupleField(result, "stx-user-amount")).toBeUint(uintWithDecimals(9.9).value);
+  });
+
+  it("core-btc: admin can shutdown init withdraws", () => {
+    const core = new Core(deployer);
+
+    expect(core.deposit(wallet_1, 1000, undefined, qualifiedName("stacking-pool-v1"))).toBeOk(uintWithDecimals(1000));
+
+    expect(core.getShutdownInitWithdraw()).toBeBool(false);
+
+    expect(core.setShutdownInitWithdraw(deployer, true)).toBeOk(Cl.bool(true));
+
+    expect(core.getShutdownInitWithdraw()).toBeBool(true);
+
+    expect(core.initWithdraw(wallet_1, 1000)).toBeErr(Cl.uint(204002));
+
+    expect(core.setShutdownInitWithdraw(deployer, false)).toBeOk(Cl.bool(true));
+
+    expect(core.getShutdownInitWithdraw()).toBeBool(false);
+
+    expect(core.initWithdraw(wallet_1, 1000)).toBeOk(Cl.uint(0));
+  });
+
+  it("core-btc: admin can shutdown withdraws", () => {
+    const core = new Core(deployer);
+
+    expect(core.deposit(wallet_1, 1000, undefined, qualifiedName("stacking-pool-v1"))).toBeOk(uintWithDecimals(1000));
+
+    expect(core.initWithdraw(wallet_1, 1000)).toBeOk(Cl.uint(0));
+
+    mineEmptyBlockUntil(21 + 4);
+
+    expect(core.getShutdownWithdraw()).toBeBool(false);
+
+    expect(core.setShutdownWithdraw(deployer, true)).toBeOk(Cl.bool(true));
+
+    expect(core.getShutdownWithdraw()).toBeBool(true);
+
+    expect(core.withdraw(wallet_1, 0)).toBeErr(Cl.uint(204002));
+
+    expect(core.setShutdownWithdraw(deployer, false)).toBeOk(Cl.bool(true));
+
+    expect(core.getShutdownWithdraw()).toBeBool(false);
+
+    let result = okValue(core.withdraw(wallet_1, 0));
+    expect(tupleField(result, "stx-user-amount")).toBeUint(uintWithDecimals(1000).value);
+  });
+
+  //-------------------------------------
+  // Access
+  //-------------------------------------
+
+  it("core-btc: only protocol can call admin methods", () => {
+    const core = new Core(deployer);
+
+    expect(core.setShutdownDeposits(wallet_1, true)).toBeErr(Cl.uint(20003));
+
+    expect(core.setShutdownInitWithdraw(wallet_1, true)).toBeErr(Cl.uint(20003));
+
+    expect(core.setShutdownWithdraw(wallet_1, true)).toBeErr(Cl.uint(20003));
+
+    expect(core.setStackFee(wallet_1, 100)).toBeErr(Cl.uint(20003));
+
+    expect(core.setUnstackFee(wallet_1, 100)).toBeErr(Cl.uint(20003));
+  });
+
+  //-------------------------------------
+  // Errors
+  //-------------------------------------
+
+  it("core-btc: can not call deposit with wrong trait params", () => {
+    let r = simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "deposit",
+      [
+        Cl.principal(qualifiedName("fake-reserve")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.principal(qualifiedName("direct-helpers-v4")),
+        Cl.uint(100 * 1_000_000),
+        Cl.none(),
+        Cl.none(),
+      ],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(20003));
+
+    r = simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "deposit",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.principal(qualifiedName("fake-direct-helpers")),
+        Cl.uint(100 * 1_000_000),
+        Cl.none(),
+        Cl.none(),
+      ],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(20003));
+  });
+
+  it("core-btc: can not call withdraw idle with wrong trait params", () => {
+    let r = simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "withdraw-idle",
+      [
+        Cl.principal(qualifiedName("fake-reserve")),
+        Cl.principal(qualifiedName("direct-helpers-v4")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.uint(100 * 1_000_000),
+      ],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(20003));
+
+    r = simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "withdraw-idle",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.principal(qualifiedName("fake-direct-helpers")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.uint(100 * 1_000_000),
+      ],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(20003));
+  });
+
+  it("core-btc: can not call init-withdraw with wrong trait params", () => {
+    let r = simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "init-withdraw",
+      [
+        Cl.principal(qualifiedName("fake-reserve")),
+        Cl.principal(qualifiedName("direct-helpers-v4")),
+        Cl.uint(100 * 1_000_000),
+      ],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(20003));
+
+    r = simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "init-withdraw",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.principal(qualifiedName("fake-direct-helpers")),
+        Cl.uint(100 * 1_000_000),
+      ],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(20003));
+  });
+
+  it("core-btc: can not call withdraw with wrong trait params", () => {
+    let r = simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "withdraw",
+      [
+        Cl.principal(qualifiedName("fake-reserve")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.uint(0),
+      ],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(20003));
+  });
+
+  it("core-btc: can only withdraw idle if enough deposited", () => {
+    const core = new Core(deployer);
+
+    expect(core.deposit(wallet_1, 1000, undefined, undefined)).toBeOk(uintWithDecimals(1000));
+
+    expect(core.withdrawIdle(wallet_1, 1000 + 1)).toBeErr(Cl.uint(204006));
+  });
+
+  it("core-btc: can only withdraw if burn block height reached", () => {
+    const core = new Core(deployer);
+
+    expect(core.deposit(wallet_1, 1000, undefined, undefined)).toBeOk(uintWithDecimals(1000));
+
+    expect(core.initWithdraw(wallet_1, 200)).toBeOk(Cl.uint(0));
+
+    mineEmptyBlockUntil(21);
+
+    expect(core.withdraw(wallet_1, 0)).toBeErr(Cl.uint(204001));
+  });
+
+  it("core-btc: only withdrawal NFT owner can withdraw", () => {
+    const core = new Core(deployer);
+
+    expect(core.deposit(deployer, 1000, undefined, undefined)).toBeOk(uintWithDecimals(1000));
+
+    expect(core.deposit(wallet_1, 1000, undefined, undefined)).toBeOk(uintWithDecimals(1000));
+
+    expect(core.initWithdraw(deployer, 200)).toBeOk(Cl.uint(0));
+
+    expect(core.initWithdraw(wallet_1, 200)).toBeOk(Cl.uint(1));
+
+    mineEmptyBlockUntil(21 + 4);
+
+    expect(core.withdraw(wallet_1, 0)).toBeErr(Cl.uint(204003));
+
+    let result = okValue(core.withdraw(deployer, 0));
+    expect(tupleField(result, "stx-user-amount")).toBeUint(uintWithDecimals(200).value);
+  });
+
+  it("core-btc: can only use existing NFT to withdraw", () => {
+    const core = new Core(deployer);
+
+    expect(core.deposit(deployer, 1000, undefined, undefined)).toBeOk(uintWithDecimals(1000));
+
+    expect(core.deposit(wallet_1, 1000, undefined, undefined)).toBeOk(uintWithDecimals(1000));
+
+    expect(core.initWithdraw(deployer, 200)).toBeOk(Cl.uint(0));
+
+    expect(core.initWithdraw(wallet_1, 200)).toBeOk(Cl.uint(1));
+
+    // Advance past the NFT 1 unlock-burn-height (post-Nakamoto simnet starts at burn ~7,
+    // so the second init-withdraw can spill into cycle 2 -> unlock at 45)
+    mineEmptyBlockUntil(21 * 2 + 2 + 3);
+
+    let result = okValue(core.withdraw(wallet_1, 1));
+    expect(tupleField(result, "stx-user-amount")).toBeUint(uintWithDecimals(200).value);
+
+    expect(core.withdraw(wallet_1, 1)).toBeErr(Cl.uint(204004));
+
+    expect(core.withdraw(wallet_1, 99)).toBeErr(Cl.uint(204004));
+  });
+
+  it("core-btc: can not set fee higher than 10000 BPS", () => {
+    const core = new Core(deployer);
+
+    expect(core.setStackFee(deployer, 10001)).toBeErr(Cl.uint(204007));
+
+    expect(core.setUnstackFee(deployer, 10001)).toBeErr(Cl.uint(204007));
+
+    expect(core.setWithdrawIdleFee(deployer, 10001)).toBeErr(Cl.uint(204007));
+  });
 });

@@ -1,182 +1,127 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
-qualifiedName("")
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { StStxToken } from '../wrappers/ststx-token-helpers.ts';
+import { uintWithDecimals } from "../wrappers/tests-utils";
+import { StStxToken } from "../wrappers/ststx-token-helpers";
 
-//-------------------------------------
-// Getters 
-//-------------------------------------
-
-Clarinet.test({
-  name: "ststx-token: can get token info",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let stStxToken = new StStxToken(chain, deployer);
-
-    let call = await stStxToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(0);
-
-    call = await stStxToken.getName();
-    call.result.expectOk().expectAscii("Stacked STX Token");
-
-    call = await stStxToken.getSymbol();
-    call.result.expectOk().expectAscii("stSTX");
-
-    call = await stStxToken.getDecimals();
-    call.result.expectOk().expectUint(6);
-
-    call = await stStxToken.getBalance(deployer.address);
-    call.result.expectOk().expectUintWithDecimals(0);
-
-    call = await stStxToken.getTokenUri();
-    call.result.expectOk().expectSome().expectUtf8("");
-  }
-});
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
 
 //-------------------------------------
-// Core 
+// Getters
 //-------------------------------------
 
-Clarinet.test({
-  name: "ststx-token: can mint/burn as protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+describe("ststx-token", () => {
+  it("ststx-token: can get token info", () => {
+    const stStxToken = new StStxToken(deployer);
 
-    let stStxToken = new StStxToken(chain, deployer);
+    expect(stStxToken.getTotalSupply()).toBeOk(uintWithDecimals(0));
 
-    let call = await stStxToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(stStxToken.getName()).toBeOk(Cl.stringAscii("Stacked STX Token"));
 
-    call = await stStxToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(stStxToken.getSymbol()).toBeOk(Cl.stringAscii("stSTX"));
 
-    let result = await stStxToken.mintForProtocol(deployer, 100, wallet_1.address);
-    result.expectOk().expectBool(true);
+    expect(stStxToken.getDecimals()).toBeOk(Cl.uint(6));
 
-    call = await stStxToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(100);
+    expect(stStxToken.getBalance(deployer)).toBeOk(uintWithDecimals(0));
 
-    call = await stStxToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(100);
+    expect(stStxToken.getTokenUri()).toBeOk(Cl.some(Cl.stringUtf8("")));
+  });
 
-    result = await stStxToken.burnForProtocol(deployer, 20, wallet_1.address);
-    result.expectOk().expectBool(true);
+  //-------------------------------------
+  // Core
+  //-------------------------------------
 
-    call = await stStxToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(80);
+  it("ststx-token: can mint/burn as protocol", () => {
+    const stStxToken = new StStxToken(deployer);
 
-    call = await stStxToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(80);
+    expect(stStxToken.getTotalSupply()).toBeOk(uintWithDecimals(0));
 
-    result = await stStxToken.burn(wallet_1, 30);
-    result.expectOk().expectBool(true);
+    expect(stStxToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0));
 
-    call = await stStxToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(50);
+    expect(stStxToken.mintForProtocol(deployer, 100, wallet_1)).toBeOk(Cl.bool(true));
 
-    call = await stStxToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(50);
-  }
-});
+    expect(stStxToken.getTotalSupply()).toBeOk(uintWithDecimals(100));
 
-Clarinet.test({
-  name: "ststx-token: can transfer token",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+    expect(stStxToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(100));
 
-    let stStxToken = new StStxToken(chain, deployer);
+    expect(stStxToken.burnForProtocol(deployer, 20, wallet_1)).toBeOk(Cl.bool(true));
 
-    let result = await stStxToken.mintForProtocol(deployer, 100, wallet_1.address);
-    result.expectOk().expectBool(true);
+    expect(stStxToken.getTotalSupply()).toBeOk(uintWithDecimals(80));
 
-    result = await stStxToken.transfer(wallet_1, 20, wallet_2.address);
-    result.expectOk().expectBool(true);
+    expect(stStxToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(80));
 
-    let call = await stStxToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(100);
+    expect(stStxToken.burn(wallet_1, 30)).toBeOk(Cl.bool(true));
 
-    call = await stStxToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(80);
+    expect(stStxToken.getTotalSupply()).toBeOk(uintWithDecimals(50));
 
-    call = await stStxToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(20);
-  }
-});
+    expect(stStxToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(50));
+  });
 
-//-------------------------------------
-// Admin 
-//-------------------------------------
+  it("ststx-token: can transfer token", () => {
+    const stStxToken = new StStxToken(deployer);
 
-Clarinet.test({
-  name: "ststx-token: can set token URI",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(stStxToken.mintForProtocol(deployer, 100, wallet_1)).toBeOk(Cl.bool(true));
 
-    let stStxToken = new StStxToken(chain, deployer);
+    expect(stStxToken.transfer(wallet_1, 20, wallet_2)).toBeOk(Cl.bool(true));
 
-    let call = await stStxToken.getTokenUri();
-    call.result.expectOk().expectSome().expectUtf8("");
+    expect(stStxToken.getTotalSupply()).toBeOk(uintWithDecimals(100));
 
-    let result = await stStxToken.setTokenUri(deployer, "test-uri");
-    result.expectOk().expectBool(true)
+    expect(stStxToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(80));
 
-    call = await stStxToken.getTokenUri();
-    call.result.expectOk().expectSome().expectUtf8("test-uri");
-  }
-});
+    expect(stStxToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(20));
+  });
 
-//-------------------------------------
-// Error 
-//-------------------------------------
+  //-------------------------------------
+  // Admin
+  //-------------------------------------
 
-Clarinet.test({
-  name: "ststx-token: can not transfer is sender is not tx-sender, or sender has not enough",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+  it("ststx-token: can set token URI", () => {
+    const stStxToken = new StStxToken(deployer);
 
-    let stStxToken = new StStxToken(chain, deployer);
+    expect(stStxToken.getTokenUri()).toBeOk(Cl.some(Cl.stringUtf8("")));
 
-    let block = chain.mineBlock([
-      Tx.contractCall("ststx-token", "transfer", [
-        types.uint(100 * 1000000),
-        types.principal(wallet_1.address),
-        types.principal(wallet_2.address),
-        types.none()
-      ], deployer.address)
-    ]);
-    block.receipts[0].result.expectErr().expectUint(1401);
+    expect(stStxToken.setTokenUri(deployer, "test-uri")).toBeOk(Cl.bool(true));
 
-    let result = await stStxToken.transfer(wallet_1, 20, wallet_1.address);
-    result.expectErr().expectUint(2);
-  }
-});
+    expect(stStxToken.getTokenUri()).toBeOk(Cl.some(Cl.stringUtf8("test-uri")));
+  });
 
-//-------------------------------------
-// Access 
-//-------------------------------------
+  //-------------------------------------
+  // Error
+  //-------------------------------------
 
-Clarinet.test({
-  name: "ststx-token: only protocol can set token URI, mint and burn for protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("ststx-token: can not transfer is sender is not tx-sender, or sender has not enough", () => {
+    const stStxToken = new StStxToken(deployer);
 
-    let stStxToken = new StStxToken(chain, deployer);
+    const { result } = simnet.callPublicFn(
+      "ststx-token",
+      "transfer",
+      [
+        Cl.uint(100 * 1_000_000),
+        Cl.principal(wallet_1),
+        Cl.principal(wallet_2),
+        Cl.none(),
+      ],
+      deployer,
+    );
+    expect(result).toBeErr(Cl.uint(1401));
 
-    let result = await stStxToken.setTokenUri(wallet_1, "test-uri");
-    result.expectErr().expectUint(20003);
+    expect(stStxToken.transfer(wallet_1, 20, wallet_1)).toBeErr(Cl.uint(2));
+  });
 
-    result = await stStxToken.mintForProtocol(wallet_1, 100, wallet_1.address);
-    result.expectErr().expectUint(20003);
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-    result = await stStxToken.burnForProtocol(wallet_1, 100, deployer.address);
-    result.expectErr().expectUint(20003);
-  }
+  it("ststx-token: only protocol can set token URI, mint and burn for protocol", () => {
+    const stStxToken = new StStxToken(deployer);
+
+    expect(stStxToken.setTokenUri(wallet_1, "test-uri")).toBeErr(Cl.uint(20003));
+
+    expect(stStxToken.mintForProtocol(wallet_1, 100, wallet_1)).toBeErr(Cl.uint(20003));
+
+    expect(stStxToken.burnForProtocol(wallet_1, 100, deployer)).toBeErr(Cl.uint(20003));
+  });
 });

@@ -1,189 +1,132 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
-qualifiedName("")
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { SDAOToken } from '../wrappers/sdao-token-helpers.ts';
+import { uintWithDecimals } from "../wrappers/tests-utils";
+import { SDAOToken } from "../wrappers/sdao-token-helpers";
 
-//-------------------------------------
-// Getters 
-//-------------------------------------
-
-Clarinet.test({
-  name: "sdao-token: can get token info",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_4 = accounts.get("wallet_4")!
-
-    let sDaoToken = new SDAOToken(chain, deployer);
-
-    let result = sDaoToken.mintForProtocol(deployer, 100, deployer.address);
-    result.expectOk().expectBool(true);
-
-    let call = await sDaoToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(100);
-
-    call = await sDaoToken.getName();
-    call.result.expectOk().expectAscii("StackingDAO Token");
-
-    call = await sDaoToken.getSymbol();
-    call.result.expectOk().expectAscii("sDAO");
-
-    call = await sDaoToken.getDecimals();
-    call.result.expectOk().expectUint(6);
-
-    call = await sDaoToken.getBalance(deployer.address);
-    call.result.expectOk().expectUintWithDecimals(100);
-
-    call = await sDaoToken.getBalance(wallet_4.address);
-    call.result.expectOk().expectUintWithDecimals(0);
-
-    call = await sDaoToken.getTokenUri();
-    call.result.expectOk().expectSome().expectUtf8("");
-  }
-});
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
+const wallet_4 = accounts.get("wallet_4")!;
 
 //-------------------------------------
-// Core 
+// Getters
 //-------------------------------------
 
-Clarinet.test({
-  name: "sdao-token: can mint/burn as protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+describe("sdao-token", () => {
+  it("sdao-token: can get token info", () => {
+    const sDaoToken = new SDAOToken(deployer);
 
-    let sDaoToken = new SDAOToken(chain, deployer);
+    expect(sDaoToken.mintForProtocol(deployer, 100, deployer)).toBeOk(Cl.bool(true));
 
-    let call = await sDaoToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(sDaoToken.getTotalSupply()).toBeOk(uintWithDecimals(100));
 
-    call = await sDaoToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(sDaoToken.getName()).toBeOk(Cl.stringAscii("StackingDAO Token"));
 
-    let result = await sDaoToken.mintForProtocol(deployer, 100, wallet_1.address);
-    result.expectOk().expectBool(true);
+    expect(sDaoToken.getSymbol()).toBeOk(Cl.stringAscii("sDAO"));
 
-    call = await sDaoToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(100);
+    expect(sDaoToken.getDecimals()).toBeOk(Cl.uint(6));
 
-    call = await sDaoToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(100);
+    expect(sDaoToken.getBalance(deployer)).toBeOk(uintWithDecimals(100));
 
-    result = await sDaoToken.burnForProtocol(deployer, 20, wallet_1.address);
-    result.expectOk().expectBool(true);
+    expect(sDaoToken.getBalance(wallet_4)).toBeOk(uintWithDecimals(0));
 
-    call = await sDaoToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(80);
+    expect(sDaoToken.getTokenUri()).toBeOk(Cl.some(Cl.stringUtf8("")));
+  });
 
-    call = await sDaoToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(80);
+  //-------------------------------------
+  // Core
+  //-------------------------------------
 
-    result = await sDaoToken.burn(wallet_1, 30);
-    result.expectOk().expectBool(true);
+  it("sdao-token: can mint/burn as protocol", () => {
+    const sDaoToken = new SDAOToken(deployer);
 
-    call = await sDaoToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(50);
+    expect(sDaoToken.getTotalSupply()).toBeOk(uintWithDecimals(0));
 
-    call = await sDaoToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(50);
-  }
-});
+    expect(sDaoToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0));
 
-Clarinet.test({
-  name: "sdao-token: can transfer token",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+    expect(sDaoToken.mintForProtocol(deployer, 100, wallet_1)).toBeOk(Cl.bool(true));
 
-    let sDaoToken = new SDAOToken(chain, deployer);
+    expect(sDaoToken.getTotalSupply()).toBeOk(uintWithDecimals(100));
 
-    let result = await sDaoToken.mintForProtocol(deployer, 100, wallet_1.address);
-    result.expectOk().expectBool(true);
+    expect(sDaoToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(100));
 
-    result = await sDaoToken.transfer(wallet_1, 20, wallet_2.address);
-    result.expectOk().expectBool(true);
+    expect(sDaoToken.burnForProtocol(deployer, 20, wallet_1)).toBeOk(Cl.bool(true));
 
-    let call = await sDaoToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(100);
+    expect(sDaoToken.getTotalSupply()).toBeOk(uintWithDecimals(80));
 
-    call = await sDaoToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(80);
+    expect(sDaoToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(80));
 
-    call = await sDaoToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(20);
-  }
-});
+    expect(sDaoToken.burn(wallet_1, 30)).toBeOk(Cl.bool(true));
 
-//-------------------------------------
-// Admin 
-//-------------------------------------
+    expect(sDaoToken.getTotalSupply()).toBeOk(uintWithDecimals(50));
 
-Clarinet.test({
-  name: "sdao-token: can set token URI",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(sDaoToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(50));
+  });
 
-    let sDaoToken = new SDAOToken(chain, deployer);
+  it("sdao-token: can transfer token", () => {
+    const sDaoToken = new SDAOToken(deployer);
 
-    let call = await sDaoToken.getTokenUri();
-    call.result.expectOk().expectSome().expectUtf8("");
+    expect(sDaoToken.mintForProtocol(deployer, 100, wallet_1)).toBeOk(Cl.bool(true));
 
-    let result = await sDaoToken.setTokenUri(deployer, "test-uri");
-    result.expectOk().expectBool(true)
+    expect(sDaoToken.transfer(wallet_1, 20, wallet_2)).toBeOk(Cl.bool(true));
 
-    call = await sDaoToken.getTokenUri();
-    call.result.expectOk().expectSome().expectUtf8("test-uri");
-  }
-});
+    expect(sDaoToken.getTotalSupply()).toBeOk(uintWithDecimals(100));
 
-//-------------------------------------
-// Error 
-//-------------------------------------
+    expect(sDaoToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(80));
 
-Clarinet.test({
-  name: "sdao-token: can not transfer is sender is not tx-sender, or sender has not enough",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+    expect(sDaoToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(20));
+  });
 
-    let sDaoToken = new SDAOToken(chain, deployer);
+  //-------------------------------------
+  // Admin
+  //-------------------------------------
 
-    let block = chain.mineBlock([
-      Tx.contractCall("sdao-token", "transfer", [
-        types.uint(100 * 1000000),
-        types.principal(wallet_1.address),
-        types.principal(wallet_2.address),
-        types.none()
-      ], deployer.address)
-    ]);
-    block.receipts[0].result.expectErr().expectUint(1401);
+  it("sdao-token: can set token URI", () => {
+    const sDaoToken = new SDAOToken(deployer);
 
-    let result = await sDaoToken.transfer(wallet_1, 20, wallet_1.address);
-    result.expectErr().expectUint(2);
-  }
-});
+    expect(sDaoToken.getTokenUri()).toBeOk(Cl.some(Cl.stringUtf8("")));
 
-//-------------------------------------
-// Access 
-//-------------------------------------
+    expect(sDaoToken.setTokenUri(deployer, "test-uri")).toBeOk(Cl.bool(true));
 
-Clarinet.test({
-  name: "sdao-token: only protocol can set token URI, mint and burn for protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    expect(sDaoToken.getTokenUri()).toBeOk(Cl.some(Cl.stringUtf8("test-uri")));
+  });
 
-    let sDaoToken = new SDAOToken(chain, deployer);
+  //-------------------------------------
+  // Error
+  //-------------------------------------
 
-    let result = await sDaoToken.setTokenUri(wallet_1, "test-uri");
-    result.expectErr().expectUint(20003);
+  it("sdao-token: can not transfer is sender is not tx-sender, or sender has not enough", () => {
+    const sDaoToken = new SDAOToken(deployer);
 
-    result = await sDaoToken.mintForProtocol(wallet_1, 100, wallet_1.address);
-    result.expectErr().expectUint(20003);
+    let r = simnet.callPublicFn(
+      "sdao-token",
+      "transfer",
+      [
+        Cl.uint(100 * 1_000_000),
+        Cl.principal(wallet_1),
+        Cl.principal(wallet_2),
+        Cl.none(),
+      ],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(1401));
 
-    result = await sDaoToken.burnForProtocol(wallet_1, 100, deployer.address);
-    result.expectErr().expectUint(20003);
-  }
+    expect(sDaoToken.transfer(wallet_1, 20, wallet_1)).toBeErr(Cl.uint(2));
+  });
+
+  //-------------------------------------
+  // Access
+  //-------------------------------------
+
+  it("sdao-token: only protocol can set token URI, mint and burn for protocol", () => {
+    const sDaoToken = new SDAOToken(deployer);
+
+    expect(sDaoToken.setTokenUri(wallet_1, "test-uri")).toBeErr(Cl.uint(20003));
+
+    expect(sDaoToken.mintForProtocol(wallet_1, 100, wallet_1)).toBeErr(Cl.uint(20003));
+
+    expect(sDaoToken.burnForProtocol(wallet_1, 100, deployer)).toBeErr(Cl.uint(20003));
+  });
 });

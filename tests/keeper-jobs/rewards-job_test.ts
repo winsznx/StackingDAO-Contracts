@@ -1,146 +1,116 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName, REWARD_CYCLE_LENGTH } from '../wrappers/tests-utils.ts';
-qualifiedName("")
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { CoreV1 as Core } from '../wrappers/stacking-dao-core-helpers.ts';
-import { RewardsJob } from '../wrappers/rewards-job-helpers.ts';
+import {
+  mineEmptyBlockUntil,
+  qualifiedName,
+  REWARD_CYCLE_LENGTH,
+  tupleField,
+  uintWithDecimals,
+} from "../wrappers/tests-utils";
+import { CoreV1 as Core } from "../wrappers/stacking-dao-core-helpers";
+import { RewardsJob } from "../wrappers/rewards-job-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
 
 //-------------------------------------
-// Rewards Job 
+// Rewards Job
 //-------------------------------------
 
-Clarinet.test({
-  name: "rewards-job: run job",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+describe("rewards-job", () => {
+  it("rewards-job: run job", () => {
+    const rewardsJob = new RewardsJob(deployer);
+    const core = new Core(deployer);
 
-    let rewardsJob = new RewardsJob(chain, deployer);
-    let core = new Core(chain, deployer);
-
-    let call:any = rewardsJob.checkJob();
-    call.result.expectOk().expectBool(false);
+    expect(rewardsJob.checkJob()).toBeOk(Cl.bool(false));
 
     // Transfer 100 STX to contract
-    let block = chain.mineBlock([
-      Tx.transferSTX(100 * 1000000, qualifiedName("rewards-job-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(simnet.transferSTX(100 * 1_000_000, qualifiedName("rewards-job-v1"), deployer).result).toBeOk(Cl.bool(true));
 
     //
     // Advance to cycle 1
     //
 
-    chain.mineEmptyBlockUntil(REWARD_CYCLE_LENGTH+1);
+    mineEmptyBlockUntil(REWARD_CYCLE_LENGTH + 1);
 
     //
     // At beginning of PoX cycle
     //
-    call = core.getPoxCycle();
-    call.result.expectUint(1);
+    expect(core.getPoxCycle()).toBeUint(1);
 
-    call = core.getNextWithdrawCycle();
-    call.result.expectUint(2);
+    expect(core.getNextWithdrawCycle()).toBeUint(2);
 
-    call = rewardsJob.checkJob();
-    call.result.expectOk().expectBool(false);
+    expect(rewardsJob.checkJob()).toBeOk(Cl.bool(false));
 
     //
     // At end of PoX cycle
     //
 
-    chain.mineEmptyBlockUntil(REWARD_CYCLE_LENGTH + REWARD_CYCLE_LENGTH-1);
+    mineEmptyBlockUntil(REWARD_CYCLE_LENGTH + REWARD_CYCLE_LENGTH - 1);
 
-    call = core.getPoxCycle();
-    call.result.expectUint(1);
+    expect(core.getPoxCycle()).toBeUint(1);
 
-    call = core.getNextWithdrawCycle();
-    call.result.expectUint(3);
+    expect(core.getNextWithdrawCycle()).toBeUint(3);
 
-    call = rewardsJob.checkJob();
-    call.result.expectOk().expectBool(true);
+    expect(rewardsJob.checkJob()).toBeOk(Cl.bool(true));
 
     //
     // Run job
     //
 
-    call = core.getStxBalance(qualifiedName("rewards-job-v1"));
-    call.result.expectUintWithDecimals(100);
+    expect(core.getStxBalance(qualifiedName("rewards-job-v1"))).toBeUint(uintWithDecimals(100).value);
 
-    call = core.getStxBalance(qualifiedName("reserve-v1"));
-    call.result.expectUintWithDecimals(0);
+    expect(core.getStxBalance(qualifiedName("reserve-v1"))).toBeUint(uintWithDecimals(0).value);
 
-    call = core.getStxBalance(qualifiedName("commission-v1"));
-    call.result.expectUintWithDecimals(0);
+    expect(core.getStxBalance(qualifiedName("commission-v1"))).toBeUint(uintWithDecimals(0).value);
 
-    call = core.getCycleInfo(0)
-    call.result.expectTuple()["commission"].expectUintWithDecimals(0);
-    call.result.expectTuple()["rewards"].expectUintWithDecimals(0);
+    let cycleInfo = core.getCycleInfo(0);
+    expect(tupleField(cycleInfo, "commission")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(cycleInfo, "rewards")).toBeUint(uintWithDecimals(0).value);
 
-    let result = await rewardsJob.runJob(deployer);
-    result.expectOk().expectBool(true);
+    expect(rewardsJob.runJob(deployer)).toBeOk(Cl.bool(true));
 
-    call = core.getStxBalance(qualifiedName("rewards-job-v1"));
-    call.result.expectUintWithDecimals(0);
+    expect(core.getStxBalance(qualifiedName("rewards-job-v1"))).toBeUint(uintWithDecimals(0).value);
 
-    call = core.getStxBalance(qualifiedName("reserve-v1"));
-    call.result.expectUintWithDecimals(95);
+    expect(core.getStxBalance(qualifiedName("reserve-v1"))).toBeUint(uintWithDecimals(95).value);
 
-    call = core.getStxBalance(qualifiedName("commission-v1"));
-    call.result.expectUintWithDecimals(5);
+    expect(core.getStxBalance(qualifiedName("commission-v1"))).toBeUint(uintWithDecimals(5).value);
 
-    call = core.getCycleInfo(1)
-    call.result.expectTuple()["commission"].expectUintWithDecimals(5);
-    call.result.expectTuple()["rewards"].expectUintWithDecimals(95);
+    cycleInfo = core.getCycleInfo(1);
+    expect(tupleField(cycleInfo, "commission")).toBeUint(uintWithDecimals(5).value);
+    expect(tupleField(cycleInfo, "rewards")).toBeUint(uintWithDecimals(95).value);
+  });
 
-  }
-});
+  //-------------------------------------
+  // Admin
+  //-------------------------------------
 
-//-------------------------------------
-// Admin 
-//-------------------------------------
-
-Clarinet.test({
-  name: "rewards-job: protocol can retreive tokens",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let rewardsJob = new RewardsJob(chain, deployer);
-    let core = new Core(chain, deployer);
+  it("rewards-job: protocol can retreive tokens", () => {
+    const rewardsJob = new RewardsJob(deployer);
+    const core = new Core(deployer);
 
     // Transfer 100 STX to contract
-    let block = chain.mineBlock([
-      Tx.transferSTX(100 * 1000000, qualifiedName("rewards-job-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(simnet.transferSTX(100 * 1_000_000, qualifiedName("rewards-job-v1"), deployer).result).toBeOk(Cl.bool(true));
 
     // Contract balances
-    let call = core.getStxBalance(qualifiedName("rewards-job-v1"));
-    call.result.expectUintWithDecimals(100);
+    expect(core.getStxBalance(qualifiedName("rewards-job-v1"))).toBeUint(uintWithDecimals(100).value);
 
     // Retreive tokens
-    let result = await rewardsJob.retreiveStxTokens(deployer, 10, deployer.address);
-    result.expectOk().expectUintWithDecimals(10);
+    expect(rewardsJob.retreiveStxTokens(deployer, 10, deployer)).toBeOk(uintWithDecimals(10));
 
     // Contract balances
-    call = core.getStxBalance(qualifiedName("rewards-job-v1"));
-    call.result.expectUintWithDecimals(90);
+    expect(core.getStxBalance(qualifiedName("rewards-job-v1"))).toBeUint(uintWithDecimals(90).value);
+  });
 
-  }
-});
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-//-------------------------------------
-// Access 
-//-------------------------------------
+  it("rewards-job: only protocol can retreive tokens", () => {
+    const rewardsJob = new RewardsJob(deployer);
 
-Clarinet.test({
-  name: "rewards-job: only protocol can retreive tokens",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let rewardsJob = new RewardsJob(chain, deployer);
-
-    let result = await rewardsJob.retreiveStxTokens(wallet_1, 10, wallet_1.address);
-    result.expectErr().expectUint(20003);
-  }
+    expect(rewardsJob.retreiveStxTokens(wallet_1, 10, wallet_1)).toBeErr(Cl.uint(20003));
+  });
 });

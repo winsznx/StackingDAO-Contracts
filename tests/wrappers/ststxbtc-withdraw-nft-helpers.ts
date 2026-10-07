@@ -1,180 +1,147 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "./tests-utils.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
+import { qualifiedName } from "./tests-utils";
 
 // ---------------------------------------------------------
 // stSTXbtc withdraw NFT
 // ---------------------------------------------------------
 
-class StStxBtcWithdrawNft {
-  chain: Chain;
-  deployer: Account;
+export class StStxBtcWithdrawNft {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getBaseUri() {
-    return this.chain.callReadOnlyFn(
+  getBaseUri(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-withdraw-nft",
       "get-base-token-uri",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getBalance(account: string) {
-    return this.chain.callReadOnlyFn(
+  getBalance(account: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-withdraw-nft",
       "get-balance",
-      [types.principal(account)],
-      this.deployer.address
-    );
+      [Cl.principal(account)],
+      this.deployer,
+    ).result;
   }
 
-  getListingInUstx(tokenId: number) {
-    return this.chain.callReadOnlyFn(
+  getListingInUstx(tokenId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-withdraw-nft",
       "get-listing-in-ustx",
-      [types.uint(tokenId)],
-      this.deployer.address
-    );
+      [Cl.uint(tokenId)],
+      this.deployer,
+    ).result;
   }
 
-  getLastTokenId() {
-    return this.chain.callReadOnlyFn(
+  getLastTokenId(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-withdraw-nft",
       "get-last-token-id",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  uintToString() {
-    return this.chain.callReadOnlyFn(
+  uintToString(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-withdraw-nft",
       "uint-to-string",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getTokenUri(tokenId: number) {
-    return this.chain.callReadOnlyFn(
+  getTokenUri(tokenId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-withdraw-nft",
       "get-token-uri",
-      [types.uint(tokenId)],
-      this.deployer.address
-    );
+      [Cl.uint(tokenId)],
+      this.deployer,
+    ).result;
   }
 
-  getOwner(tokenId: number) {
-    return this.chain.callReadOnlyFn(
+  getOwner(tokenId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-withdraw-nft",
       "get-owner",
-      [types.uint(tokenId)],
-      this.deployer.address
-    );
+      [Cl.uint(tokenId)],
+      this.deployer,
+    ).result;
   }
 
-  setBaseUri(caller: Account, root: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-withdraw-nft",
-        "set-base-token-uri",
-        [types.ascii(root)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setBaseUri(caller: string, root: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-withdraw-nft",
+      "set-base-token-uri",
+      [Cl.stringAscii(root)],
+      caller,
+    ).result;
   }
 
-  transfer(caller: Account, tokenId: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-withdraw-nft",
-        "transfer",
-        [
-          types.uint(tokenId),
-          types.principal(caller.address),
-          types.principal(receiver),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  transfer(caller: string, tokenId: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-withdraw-nft",
+      "transfer",
+      [Cl.uint(tokenId), Cl.principal(caller), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  mintForProtocol(caller: Account, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-withdraw-nft",
-        "mint-for-protocol",
-        [types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  mintForProtocol(caller: string, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-withdraw-nft",
+      "mint-for-protocol",
+      [Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  burnForProtocol(caller: Account, tokenId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-withdraw-nft",
-        "burn-for-protocol",
-        [types.uint(tokenId)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  burnForProtocol(caller: string, tokenId: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-withdraw-nft",
+      "burn-for-protocol",
+      [Cl.uint(tokenId)],
+      caller,
+    ).result;
   }
 
-  listInUstx(caller: Account, tokenId: number, price: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-withdraw-nft",
-        "list-in-ustx",
-        [
-          types.uint(tokenId),
-          types.uint(price * 1000000),
-          types.principal(qualifiedName("marketplace-commission")),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  listInUstx(caller: string, tokenId: number, price: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-withdraw-nft",
+      "list-in-ustx",
+      [
+        Cl.uint(tokenId),
+        Cl.uint(price * 1_000_000),
+        Cl.principal(qualifiedName("marketplace-commission")),
+      ],
+      caller,
+    ).result;
   }
 
-  unlistInUstx(caller: Account, tokenId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-withdraw-nft",
-        "unlist-in-ustx",
-        [types.uint(tokenId)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  unlistInUstx(caller: string, tokenId: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-withdraw-nft",
+      "unlist-in-ustx",
+      [Cl.uint(tokenId)],
+      caller,
+    ).result;
   }
 
-  buyInUstx(caller: Account, tokenId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-withdraw-nft",
-        "buy-in-ustx",
-        [
-          types.uint(tokenId),
-          types.principal(qualifiedName("marketplace-commission")),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  buyInUstx(caller: string, tokenId: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-withdraw-nft",
+      "buy-in-ustx",
+      [
+        Cl.uint(tokenId),
+        Cl.principal(qualifiedName("marketplace-commission")),
+      ],
+      caller,
+    ).result;
   }
 }
-export { StStxBtcWithdrawNft };

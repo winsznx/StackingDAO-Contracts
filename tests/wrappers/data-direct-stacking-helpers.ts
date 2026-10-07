@@ -1,100 +1,117 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // Data Direct Stacking
 // ---------------------------------------------------------
 
-class DataDirectStacking {
-  chain: Chain;
-  deployer: Account;
+export class DataDirectStacking {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getDirectStackingDependence() {
-    return this.chain.callReadOnlyFn("data-direct-stacking-v1", "get-direct-stacking-dependence", [], this.deployer.address);
+  getDirectStackingDependence(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-direct-stacking-v1",
+      "get-direct-stacking-dependence",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getTotalDirectStacking() {
-    return this.chain.callReadOnlyFn("data-direct-stacking-v1", "get-total-direct-stacking", [], this.deployer.address);
+  getTotalDirectStacking(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-direct-stacking-v1",
+      "get-total-direct-stacking",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getDirectStackingPoolAmount(pool: string) {
-    return this.chain.callReadOnlyFn("data-direct-stacking-v1", "get-direct-stacking-pool-amount", [
-      types.principal(pool)
-    ], this.deployer.address);
+  getDirectStackingPoolAmount(pool: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-direct-stacking-v1",
+      "get-direct-stacking-pool-amount",
+      [Cl.principal(pool)],
+      this.deployer,
+    ).result;
   }
 
-  getDirectStackingUser(user: string) {
-    return this.chain.callReadOnlyFn("data-direct-stacking-v1", "get-direct-stacking-user", [
-      types.principal(user)
-    ], this.deployer.address);
+  getDirectStackingUser(user: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-direct-stacking-v1",
+      "get-direct-stacking-user",
+      [Cl.principal(user)],
+      this.deployer,
+    ).result;
   }
 
-  setDirectStackingDependence(caller: Account, dependence: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-direct-stacking-v1", "set-direct-stacking-dependence", [
-        types.uint(dependence),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setDirectStackingDependence(caller: string, dependence: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-direct-stacking-v1",
+      "set-direct-stacking-dependence",
+      [Cl.uint(dependence)],
+      caller,
+    ).result;
   }
 
-  setTotalDirectStacking(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-direct-stacking-v1", "set-total-direct-stacking", [
-        types.uint(amount * 1000000),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setTotalDirectStacking(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-direct-stacking-v1",
+      "set-total-direct-stacking",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  setDirectStackingPoolAmount(caller: Account, pool: string, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-direct-stacking-v1", "set-direct-stacking-pool-amount", [
-        types.principal(pool),
-        types.uint(amount * 1000000),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setDirectStackingPoolAmount(caller: string, pool: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-direct-stacking-v1",
+      "set-direct-stacking-pool-amount",
+      [Cl.principal(pool), Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  setDirectStackingUser(caller: Account, user: string, pool: string, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-direct-stacking-v1", "set-direct-stacking-user", [
-        types.principal(user),
-        types.principal(pool),
-        types.uint(amount * 1000000),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setDirectStackingUser(
+    caller: string,
+    user: string,
+    pool: string,
+    amount: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "data-direct-stacking-v1",
+      "set-direct-stacking-user",
+      [Cl.principal(user), Cl.principal(pool), Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  deleteDirectStackingUser(caller: Account, user: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-direct-stacking-v1", "delete-direct-stacking-user", [
-        types.principal(user),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  deleteDirectStackingUser(caller: string, user: string): ClarityValue {
+    return simnet.callPublicFn(
+      "data-direct-stacking-v1",
+      "delete-direct-stacking-user",
+      [Cl.principal(user)],
+      caller,
+    ).result;
   }
 
-  getSupportedProtocols() {
-    return this.chain.callReadOnlyFn("data-direct-stacking-v1", "get-supported-protocols", [
-    ], this.deployer.address);
+  getSupportedProtocols(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-direct-stacking-v1",
+      "get-supported-protocols",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  setSupportedProtocols(caller: Account, protocols: string[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-direct-stacking-v1", "set-supported-protocols", [
-        types.list(protocols.map(protocol => types.principal(protocol))),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setSupportedProtocols(caller: string, protocols: string[]): ClarityValue {
+    return simnet.callPublicFn(
+      "data-direct-stacking-v1",
+      "set-supported-protocols",
+      [Cl.list(protocols.map((protocol) => Cl.principal(protocol)))],
+      caller,
+    ).result;
   }
-
 }
-export { DataDirectStacking };

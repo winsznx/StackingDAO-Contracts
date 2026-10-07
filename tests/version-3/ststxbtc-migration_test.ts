@@ -1,334 +1,244 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { CoreBtc } from "../wrappers/stacking-dao-core-btc-helpers.ts";
-import { StStxBtcTokenV1, StStxBtcToken } from "../wrappers/ststxbtc-token-helpers.ts";
-import { StStxBtcTrackingData } from "../wrappers/ststxbtc-tracking-data-helpers.ts";
-import { SBtcToken } from "../wrappers/sbtc-token-helpers.ts";
-import { StStxBtcTracking } from "../wrappers/ststxbtc-tracking-helpers.ts";
+import {
+  tupleField,
+  uintWithDecimals,
+} from "../wrappers/tests-utils";
+import { CoreBtc } from "../wrappers/stacking-dao-core-btc-helpers";
+import { StStxBtcTokenV1, StStxBtcToken } from "../wrappers/ststxbtc-token-helpers";
+import { StStxBtcTrackingData } from "../wrappers/ststxbtc-tracking-data-helpers";
+import { SBtcToken } from "../wrappers/sbtc-token-helpers";
+import { StStxBtcTracking } from "../wrappers/ststxbtc-tracking-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
 
 //-------------------------------------
 // Core
 //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-migration: successful migration",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-
-    let stStxBtcTokenV1 = new StStxBtcTokenV1(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let trackingData = new StStxBtcTrackingData(chain, deployer);
+describe("ststxbtc-migration", () => {
+  it("ststxbtc-migration: successful migration", () => {
+    const stStxBtcTokenV1 = new StStxBtcTokenV1(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const trackingData = new StStxBtcTrackingData(deployer);
 
     // Mint stStxBtcTokenV1 tokens to wallet_1 and wallet_2
-    let result = await stStxBtcTokenV1.mintForProtocol(deployer, 1000, wallet_1.address);
-    result.expectOk().expectBool(true);
-    result = await stStxBtcTokenV1.mintForProtocol(deployer, 2000, wallet_2.address);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTokenV1.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(stStxBtcTokenV1.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Check initial balances
-    let balance = await stStxBtcTokenV1.getBalance(wallet_1.address);
-    balance.result.expectOk().expectUintWithDecimals(1000);
-    balance = await stStxBtcTokenV1.getBalance(wallet_2.address);
-    balance.result.expectOk().expectUintWithDecimals(2000);
+    expect(stStxBtcTokenV1.getBalance(wallet_1)).toBeOk(uintWithDecimals(1000));
+    expect(stStxBtcTokenV1.getBalance(wallet_2)).toBeOk(uintWithDecimals(2000));
 
-    balance = await stStxBtcToken.getBalance(wallet_1.address);
-    balance.result.expectOk().expectUintWithDecimals(0);
-    balance = await stStxBtcToken.getBalance(wallet_2.address);
-    balance.result.expectOk().expectUintWithDecimals(0);
+    expect(stStxBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0));
+    expect(stStxBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(0));
 
     // Check initial tracking data
-    let trackingBalance = await chain.callReadOnlyFn(
+    let trackingBalance = simnet.callReadOnlyFn(
       "ststxbtc-tracking-data",
       "get-holder-position",
-      [types.principal(wallet_1.address), types.principal(wallet_1.address)],
-      deployer.address
-    );
-    trackingBalance.result.expectTuple().amount.expectUintWithDecimals(1000);
-    trackingBalance = await chain.callReadOnlyFn(
+      [Cl.principal(wallet_1), Cl.principal(wallet_1)],
+      deployer,
+    ).result;
+    expect(tupleField(trackingBalance, "amount")).toBeUint(uintWithDecimals(1000).value);
+    trackingBalance = simnet.callReadOnlyFn(
       "ststxbtc-tracking-data",
       "get-holder-position",
-      [types.principal(wallet_2.address), types.principal(wallet_2.address)],
-      deployer.address
-    );
-    trackingBalance.result.expectTuple().amount.expectUintWithDecimals(2000);
-    trackingBalance = await trackingData.getHolderPosition(wallet_1.address, wallet_1.address);
-    trackingBalance.result.expectTuple().amount.expectUintWithDecimals(0);
-    trackingBalance = await trackingData.getHolderPosition(wallet_2.address, wallet_2.address);
-    trackingBalance.result.expectTuple().amount.expectUintWithDecimals(0);
+      [Cl.principal(wallet_2), Cl.principal(wallet_2)],
+      deployer,
+    ).result;
+    expect(tupleField(trackingBalance, "amount")).toBeUint(uintWithDecimals(2000).value);
+    trackingBalance = trackingData.getHolderPosition(wallet_1, wallet_1);
+    expect(tupleField(trackingBalance, "amount")).toBeUint(uintWithDecimals(0).value);
+    trackingBalance = trackingData.getHolderPosition(wallet_2, wallet_2);
+    expect(tupleField(trackingBalance, "amount")).toBeUint(uintWithDecimals(0).value);
 
     // Migrate stStxBtcTokenV1 tokens to stStxBtcToken for wallet_1
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-migration-v1",
-        "migrate-ststxbtc",
-        [
-          types.list([
-            types.principal(wallet_1.address)
-          ])
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectOk().expectList()[0].expectOk().expectBool(true);
+    let migrateResult = simnet.callPublicFn(
+      "ststxbtc-migration-v1",
+      "migrate-ststxbtc",
+      [Cl.list([Cl.principal(wallet_1)])],
+      deployer,
+    ).result;
+    expect(migrateResult).toBeOk(Cl.list([Cl.ok(Cl.bool(true))]));
 
     // Self migrate stStxBtcTokenV1 tokens to stStxBtcToken for wallet_2
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-migration-v1",
-        "migrate-self",
-        [],
-        wallet_2.address
-      ),
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    let selfMigrate = simnet.callPublicFn(
+      "ststxbtc-migration-v1",
+      "migrate-self",
+      [],
+      wallet_2,
+    ).result;
+    expect(selfMigrate).toBeOk(Cl.bool(true));
 
     // Check balances
-    balance = await stStxBtcTokenV1.getBalance(wallet_1.address);
-    balance.result.expectOk().expectUintWithDecimals(0);
-    balance = await stStxBtcTokenV1.getBalance(wallet_2.address);
-    balance.result.expectOk().expectUintWithDecimals(0);
+    expect(stStxBtcTokenV1.getBalance(wallet_1)).toBeOk(uintWithDecimals(0));
+    expect(stStxBtcTokenV1.getBalance(wallet_2)).toBeOk(uintWithDecimals(0));
 
-    balance = await stStxBtcToken.getBalance(wallet_1.address);
-    balance.result.expectOk().expectUintWithDecimals(1000);
-    balance = await stStxBtcToken.getBalance(wallet_2.address);
-    balance.result.expectOk().expectUintWithDecimals(2000);
+    expect(stStxBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(1000));
+    expect(stStxBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(2000));
 
     // Check tracking data
-    trackingBalance = await chain.callReadOnlyFn(
+    trackingBalance = simnet.callReadOnlyFn(
       "ststxbtc-tracking-data",
       "get-holder-position",
-      [types.principal(wallet_1.address), types.principal(wallet_1.address)],
-      deployer.address
-    );
-    trackingBalance.result.expectTuple().amount.expectUintWithDecimals(0);
-    trackingBalance = await chain.callReadOnlyFn(
+      [Cl.principal(wallet_1), Cl.principal(wallet_1)],
+      deployer,
+    ).result;
+    expect(tupleField(trackingBalance, "amount")).toBeUint(uintWithDecimals(0).value);
+    trackingBalance = simnet.callReadOnlyFn(
       "ststxbtc-tracking-data",
       "get-holder-position",
-      [types.principal(wallet_2.address), types.principal(wallet_2.address)],
-      deployer.address
-    );
-    trackingBalance.result.expectTuple().amount.expectUintWithDecimals(0);
-    trackingBalance = await trackingData.getHolderPosition(wallet_1.address, wallet_1.address);
-    trackingBalance.result.expectTuple().amount.expectUintWithDecimals(1000);
-    trackingBalance = await trackingData.getHolderPosition(wallet_2.address, wallet_2.address);
-    trackingBalance.result.expectTuple().amount.expectUintWithDecimals(2000);
-  },
-});
+      [Cl.principal(wallet_2), Cl.principal(wallet_2)],
+      deployer,
+    ).result;
+    expect(tupleField(trackingBalance, "amount")).toBeUint(uintWithDecimals(0).value);
+    trackingBalance = trackingData.getHolderPosition(wallet_1, wallet_1);
+    expect(tupleField(trackingBalance, "amount")).toBeUint(uintWithDecimals(1000).value);
+    trackingBalance = trackingData.getHolderPosition(wallet_2, wallet_2);
+    expect(tupleField(trackingBalance, "amount")).toBeUint(uintWithDecimals(2000).value);
+  });
 
-Clarinet.test({
-  name: "ststxbtc-migration: rewards are claimed on migration",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-
-    let stStxBtcTokenV1 = new StStxBtcTokenV1(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
+  it("ststxbtc-migration: rewards are claimed on migration", () => {
+    const stStxBtcTokenV1 = new StStxBtcTokenV1(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
 
     // Mint sBTC tokens for rewards
-    let result = await sBtcToken.protocolMint(deployer, 1000, deployer.address);
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.protocolMint(deployer, 1000, deployer)).toBeOk(Cl.bool(true));
 
-    // Mint stStxBtcToken tokens 
-    result = await stStxBtcToken.mintForProtocol(deployer, 1000, deployer.address);
-    result.expectOk().expectBool(true);
+    // Mint stStxBtcToken tokens
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, deployer)).toBeOk(Cl.bool(true));
 
     // Mint stStxBtcTokenV1 tokens to wallet_1 and wallet_2
-    result = await stStxBtcTokenV1.mintForProtocol(deployer, 1000, wallet_1.address);
-    result.expectOk().expectBool(true);
-    result = await stStxBtcTokenV1.mintForProtocol(deployer, 2000, wallet_2.address);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTokenV1.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(stStxBtcTokenV1.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Check initial balances
-    let balance = await sBtcToken.getBalance(wallet_1.address);
-    balance.result.expectOk().expectUintWithDecimals(0);
-    balance = await sBtcToken.getBalance(wallet_2.address);
-    balance.result.expectOk().expectUintWithDecimals(0);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0));
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(0));
 
     // Add rewards for both tokens
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking",
-        "add-rewards",
-        [types.uint(300 * 100000000)],
-        deployer.address
-      ),
-    ]);
-    result = block.receipts[0].result;
-    result.expectOk().expectBool(true);
+    let addResV1 = simnet.callPublicFn(
+      "ststxbtc-tracking",
+      "add-rewards",
+      [Cl.uint(300 * 100_000_000)],
+      deployer,
+    ).result;
+    expect(addResV1).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcTracking.addRewards(deployer, 300);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 300)).toBeOk(Cl.bool(true));
 
     // Check pending rewards
-    let call = await chain.callReadOnlyFn(
+    let call = simnet.callReadOnlyFn(
       "ststxbtc-tracking",
       "get-pending-rewards",
-      [
-        types.principal(wallet_1.address),
-        types.principal(wallet_1.address)
-      ],
-      deployer.address
-    )
-    call.result.expectOk().expectUintWithDecimals(100, 8);
+      [Cl.principal(wallet_1), Cl.principal(wallet_1)],
+      deployer,
+    ).result;
+    expect(call).toBeOk(uintWithDecimals(100, 8));
 
-    call = await chain.callReadOnlyFn(
+    call = simnet.callReadOnlyFn(
       "ststxbtc-tracking",
       "get-pending-rewards",
-      [
-        types.principal(wallet_2.address),
-        types.principal(wallet_2.address)
-      ],
-      deployer.address
-    )
-    call.result.expectOk().expectUintWithDecimals(200, 8);
+      [Cl.principal(wallet_2), Cl.principal(wallet_2)],
+      deployer,
+    ).result;
+    expect(call).toBeOk(uintWithDecimals(200, 8));
 
-    call = await stStxBtcTracking.getPendingRewards(wallet_1.address, wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-    call = await stStxBtcTracking.getPendingRewards(wallet_2.address, wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals(0, 8));
+    expect(stStxBtcTracking.getPendingRewards(wallet_2, wallet_2)).toBeOk(uintWithDecimals(0, 8));
 
     // Migrate stStxBtcTokenV1 tokens to stStxBtcToken for wallet_1
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-migration-v1",
-        "migrate-ststxbtc",
-        [
-          types.list([
-            types.principal(wallet_1.address)
-          ])
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectOk().expectList()[0].expectOk().expectBool(true);
+    let migrateResult = simnet.callPublicFn(
+      "ststxbtc-migration-v1",
+      "migrate-ststxbtc",
+      [Cl.list([Cl.principal(wallet_1)])],
+      deployer,
+    ).result;
+    expect(migrateResult).toBeOk(Cl.list([Cl.ok(Cl.bool(true))]));
 
     // Self migrate stStxBtcTokenV1 tokens to stStxBtcToken for wallet_2
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-migration-v1",
-        "migrate-self",
-        [],
-        wallet_2.address
-      ),
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    let selfMigrate = simnet.callPublicFn(
+      "ststxbtc-migration-v1",
+      "migrate-self",
+      [],
+      wallet_2,
+    ).result;
+    expect(selfMigrate).toBeOk(Cl.bool(true));
 
     // Check balances
-    balance = await sBtcToken.getBalance(wallet_1.address);
-    balance.result.expectOk().expectUintWithDecimals(100, 8);
-    balance = await sBtcToken.getBalance(wallet_2.address);
-    balance.result.expectOk().expectUintWithDecimals(200, 8);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(100, 8));
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(200, 8));
 
     // Check pending rewards
-    call = await chain.callReadOnlyFn(
+    call = simnet.callReadOnlyFn(
       "ststxbtc-tracking",
       "get-pending-rewards",
-      [
-        types.principal(wallet_1.address),
-        types.principal(wallet_1.address)
-      ],
-      deployer.address
-    )
-    call.result.expectOk().expectUintWithDecimals(0, 8);
+      [Cl.principal(wallet_1), Cl.principal(wallet_1)],
+      deployer,
+    ).result;
+    expect(call).toBeOk(uintWithDecimals(0, 8));
 
-    call = await chain.callReadOnlyFn(
+    call = simnet.callReadOnlyFn(
       "ststxbtc-tracking",
       "get-pending-rewards",
-      [
-        types.principal(wallet_2.address),
-        types.principal(wallet_2.address)
-      ],
-      deployer.address
-    )
-    call.result.expectOk().expectUintWithDecimals(0, 8);
+      [Cl.principal(wallet_2), Cl.principal(wallet_2)],
+      deployer,
+    ).result;
+    expect(call).toBeOk(uintWithDecimals(0, 8));
 
-    call = await stStxBtcTracking.getPendingRewards(wallet_1.address, wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-    call = await stStxBtcTracking.getPendingRewards(wallet_2.address, wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals(0, 8));
+    expect(stStxBtcTracking.getPendingRewards(wallet_2, wallet_2)).toBeOk(uintWithDecimals(0, 8));
+  });
 
-  },
-});
+  //-------------------------------------
+  // Errors
+  //-------------------------------------
 
-//-------------------------------------
-// Errors
-//-------------------------------------
+  it("ststxbtc-migration: unauthorized caller", () => {
+    let r = simnet.callPublicFn(
+      "ststxbtc-migration-v1",
+      "migrate-ststxbtc",
+      [Cl.list([Cl.principal(wallet_1)])],
+      wallet_1,
+    ).result;
+    expect(r).toBeErr(Cl.uint(20003));
+  });
 
-Clarinet.test({
-  name: "ststxbtc-migration: unauthorized caller",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-migration-v1",
-        "migrate-ststxbtc",
-        [
-          types.list([
-            types.principal(wallet_1.address)
-          ])
-        ],
-        wallet_1.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
-  },
-});
-
-Clarinet.test({
-  name: "ststxbtc-migration: unsupported position",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let coreBtc = new CoreBtc(chain, deployer);
+  it("ststxbtc-migration: unsupported position", () => {
+    const coreBtc = new CoreBtc(deployer);
 
     // Deposit for stSTXbtc
-    let result = await coreBtc.deposit(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(coreBtc.deposit(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
     // Set active position
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data",
-        "set-supported-positions",
-        [
-          types.principal(wallet_1.address),
-          types.bool(true),
-          types.principal(deployer.address),
-          types.uint(1000),
-          types.uint(0)
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    let setPos = simnet.callPublicFn(
+      "ststxbtc-tracking-data",
+      "set-supported-positions",
+      [
+        Cl.principal(wallet_1),
+        Cl.bool(true),
+        Cl.principal(deployer),
+        Cl.uint(1000),
+        Cl.uint(0),
+      ],
+      deployer,
+    ).result;
+    expect(setPos).toBeOk(Cl.bool(true));
 
     // Try to migrate tokens
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-migration-v1",
-        "migrate-ststxbtc",
-        [
-          types.list([
-            types.principal(wallet_1.address)
-          ])
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectOk().expectList()[0].expectErr().expectUint(10401);
-  },
+    let migrateResult = simnet.callPublicFn(
+      "ststxbtc-migration-v1",
+      "migrate-ststxbtc",
+      [Cl.list([Cl.principal(wallet_1)])],
+      deployer,
+    ).result;
+    expect(migrateResult).toBeOk(Cl.list([Cl.error(Cl.uint(10401))]));
+  });
 });

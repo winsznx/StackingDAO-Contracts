@@ -1,234 +1,186 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "./tests-utils.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
+import { qualifiedName } from "./tests-utils";
 
 // ---------------------------------------------------------
 // Core BTC V1
 // ---------------------------------------------------------
 
-class CoreBtc {
-  chain: Chain;
-  deployer: Account;
+export class CoreBtc {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getShutdownDeposits() {
-    return this.chain.callReadOnlyFn(
+  getShutdownDeposits(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "stacking-dao-core-btc-v3",
       "get-shutdown-deposits",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getShutdownInitWithdraw() {
-    return this.chain.callReadOnlyFn(
+  getShutdownInitWithdraw(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "stacking-dao-core-btc-v3",
       "get-shutdown-init-withdraw",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getShutdownWithdraw() {
-    return this.chain.callReadOnlyFn(
+  getShutdownWithdraw(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "stacking-dao-core-btc-v3",
       "get-shutdown-withdraw",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getShutdownWithdrawIdle() {
-    return this.chain.callReadOnlyFn(
+  getShutdownWithdrawIdle(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "stacking-dao-core-btc-v3",
       "get-shutdown-withdraw-idle",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getIdleCycle() {
-    return this.chain.callReadOnlyFn(
+  getIdleCycle(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "stacking-dao-core-btc-v3",
       "get-idle-cycle",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
   deposit(
-    caller: Account,
+    caller: string,
     amount: number,
     referrer: string | undefined = undefined,
-    pool: string | undefined = undefined
-  ) {
-    let referrerType = types.none();
-    if (referrer) {
-      referrerType = types.some(types.principal(referrer));
-    }
-
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "deposit",
-        [
-          types.principal(qualifiedName("reserve-v1")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.principal(qualifiedName("direct-helpers-v4")),
-          types.uint(amount * 1000000),
-          referrer == undefined
-            ? types.none()
-            : types.some(types.principal(referrer)),
-          pool == undefined ? types.none() : types.some(types.principal(pool)),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    pool: string | undefined = undefined,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "deposit",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.principal(qualifiedName("direct-helpers-v4")),
+        Cl.uint(amount * 1_000_000),
+        referrer == undefined ? Cl.none() : Cl.some(Cl.principal(referrer)),
+        pool == undefined ? Cl.none() : Cl.some(Cl.principal(pool)),
+      ],
+      caller,
+    ).result;
   }
 
-  withdrawIdle(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "withdraw-idle",
-        [
-          types.principal(qualifiedName("reserve-v1")),
-          types.principal(qualifiedName("direct-helpers-v4")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.uint(amount * 1000000),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  withdrawIdle(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "withdraw-idle",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.principal(qualifiedName("direct-helpers-v4")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.uint(amount * 1_000_000),
+      ],
+      caller,
+    ).result;
   }
 
-  initWithdraw(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "init-withdraw",
-        [
-          types.principal(qualifiedName("reserve-v1")),
-          types.principal(qualifiedName("direct-helpers-v4")),
-          types.uint(amount * 1000000),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  initWithdraw(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "init-withdraw",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.principal(qualifiedName("direct-helpers-v4")),
+        Cl.uint(amount * 1_000_000),
+      ],
+      caller,
+    ).result;
   }
 
-  withdraw(caller: Account, nftId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "withdraw",
-        [
-          types.principal(qualifiedName("reserve-v1")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.uint(nftId),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  withdraw(caller: string, nftId: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "withdraw",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.uint(nftId),
+      ],
+      caller,
+    ).result;
   }
 
-  setShutdownDeposits(caller: Account, shutdown: boolean) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "set-shutdown-deposits",
-        [types.bool(shutdown)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setShutdownDeposits(caller: string, shutdown: boolean): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "set-shutdown-deposits",
+      [Cl.bool(shutdown)],
+      caller,
+    ).result;
   }
 
-  setShutdownInitWithdraw(caller: Account, shutdown: boolean) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "set-shutdown-init-withdraw",
-        [types.bool(shutdown)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setShutdownInitWithdraw(caller: string, shutdown: boolean): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "set-shutdown-init-withdraw",
+      [Cl.bool(shutdown)],
+      caller,
+    ).result;
   }
 
-  setShutdownWithdrawIdle(caller: Account, shutdown: boolean) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "set-shutdown-withdraw-idle",
-        [types.bool(shutdown)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setShutdownWithdrawIdle(caller: string, shutdown: boolean): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "set-shutdown-withdraw-idle",
+      [Cl.bool(shutdown)],
+      caller,
+    ).result;
   }
 
-  setShutdownWithdraw(caller: Account, shutdown: boolean) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "set-shutdown-withdraw",
-        [types.bool(shutdown)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setShutdownWithdraw(caller: string, shutdown: boolean): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "set-shutdown-withdraw",
+      [Cl.bool(shutdown)],
+      caller,
+    ).result;
   }
 
-  setStackFee(caller: Account, fee: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "set-stack-fee",
-        [types.uint(fee)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setStackFee(caller: string, fee: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "set-stack-fee",
+      [Cl.uint(fee)],
+      caller,
+    ).result;
   }
 
-  setUnstackFee(caller: Account, fee: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "set-unstack-fee",
-        [types.uint(fee)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setUnstackFee(caller: string, fee: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "set-unstack-fee",
+      [Cl.uint(fee)],
+      caller,
+    ).result;
   }
 
-  setWithdrawIdleFee(caller: Account, fee: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-btc-v3",
-        "set-withdraw-idle-fee",
-        [types.uint(fee)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setWithdrawIdleFee(caller: string, fee: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-dao-core-btc-v3",
+      "set-withdraw-idle-fee",
+      [Cl.uint(fee)],
+      caller,
+    ).result;
   }
 }
-export { CoreBtc };

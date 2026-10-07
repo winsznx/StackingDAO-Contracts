@@ -1,42 +1,31 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // Position Mock
 // ---------------------------------------------------------
 
-class PositionMock {
-  chain: Chain;
-  deployer: Account;
+export class PositionMock {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getBalance(user: string) {
-    return this.chain.callReadOnlyFn(
+  getBalance(user: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "position-mock",
       "get-balance",
-      [types.principal(user)],
-      this.deployer.address
-    );
+      [Cl.principal(user)],
+      this.deployer,
+    ).result;
   }
 
-  setBalance(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "position-mock",
-        "set-balance",
-        [types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setBalance(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "position-mock",
+      "set-balance",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 }
-export { PositionMock };

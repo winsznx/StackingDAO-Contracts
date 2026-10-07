@@ -6,3 +6,7 @@ history.txt
 
 /coverage/
 coverage.lcov
+
+node_modules
+costs-reports.json
+lcov.info

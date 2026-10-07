@@ -1,253 +1,212 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // stSTXbtc tracking data
 // ---------------------------------------------------------
 
-class StStxBtcTrackingData {
-  chain: Chain;
-  deployer: Account;
+export class StStxBtcTrackingData {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getTotalSupply() {
-    return this.chain.callReadOnlyFn(
+  getTotalSupply(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-data-v2",
       "get-total-supply",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getNextHolderIndex() {
-    return this.chain.callReadOnlyFn(
+  getNextHolderIndex(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-data-v2",
       "get-next-holder-index",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getCummRewards() {
-    return this.chain.callReadOnlyFn(
+  getCummRewards(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-data-v2",
       "get-cumm-reward",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getSupportedPositions(position: string) {
-    return this.chain.callReadOnlyFn(
+  getSupportedPositions(position: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-data-v2",
       "get-supported-positions",
-      [types.principal(position)],
-      this.deployer.address
-    );
+      [Cl.principal(position)],
+      this.deployer,
+    ).result;
   }
 
-  getHoldersIndexToAddress(index: number) {
-    return this.chain.callReadOnlyFn(
+  getHoldersIndexToAddress(index: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-data-v2",
       "get-holders-index-to-address",
-      [types.uint(index)],
-      this.deployer.address
-    );
+      [Cl.uint(index)],
+      this.deployer,
+    ).result;
   }
 
-  getHoldersAddressToIndex(holder: string) {
-    return this.chain.callReadOnlyFn(
+  getHoldersAddressToIndex(holder: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-data-v2",
       "get-holders-address-to-index",
-      [types.principal(holder)],
-      this.deployer.address
-    );
+      [Cl.principal(holder)],
+      this.deployer,
+    ).result;
   }
 
-  getHolderPosition(holder: string, position: string) {
-    return this.chain.callReadOnlyFn(
+  getHolderPosition(holder: string, position: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-data-v2",
       "get-holder-position",
-      [types.principal(holder), types.principal(position)],
-      this.deployer.address
-    );
+      [Cl.principal(holder), Cl.principal(position)],
+      this.deployer,
+    ).result;
   }
 
-  setTotalSupply(caller: Account, supply: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "set-total-supply",
-        [types.uint(supply * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setTotalSupply(caller: string, supply: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "set-total-supply",
+      [Cl.uint(supply * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  setNextHolderIndex(caller: Account, index: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "set-next-holder-index",
-        [types.uint(index)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setNextHolderIndex(caller: string, index: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "set-next-holder-index",
+      [Cl.uint(index)],
+      caller,
+    ).result;
   }
 
-  setCummReward(caller: Account, index: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "set-cumm-reward",
-        [types.uint(index)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setCummReward(caller: string, index: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "set-cumm-reward",
+      [Cl.uint(index)],
+      caller,
+    ).result;
   }
 
   setSupportedPositions(
-    caller: Account,
+    caller: string,
     position: string,
     active: boolean,
     reserve: string,
     total: number,
-    deactivatedCummReward: number
-  ) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "set-supported-positions",
-        [
-          types.principal(position),
-          types.bool(active),
-          types.principal(reserve),
-          types.uint(total * 1000000),
-          types.uint(deactivatedCummReward),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    deactivatedCummReward: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "set-supported-positions",
+      [
+        Cl.principal(position),
+        Cl.bool(active),
+        Cl.principal(reserve),
+        Cl.uint(total * 1_000_000),
+        Cl.uint(deactivatedCummReward),
+      ],
+      caller,
+    ).result;
   }
 
-  setHoldersIndexToAddress(caller: Account, index: number, holder: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "set-holders-index-to-address",
-        [types.uint(index), types.principal(holder)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setHoldersIndexToAddress(caller: string, index: number, holder: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "set-holders-index-to-address",
+      [Cl.uint(index), Cl.principal(holder)],
+      caller,
+    ).result;
   }
 
-  setHoldersAddressToIndex(caller: Account, holder: string, index: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "set-holders-address-to-index",
-        [types.principal(holder), types.uint(index)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setHoldersAddressToIndex(caller: string, holder: string, index: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "set-holders-address-to-index",
+      [Cl.principal(holder), Cl.uint(index)],
+      caller,
+    ).result;
   }
 
   setHolderPosition(
-    caller: Account,
+    caller: string,
     holder: string,
     position: string,
     amount: number,
-    cumm: number
-  ) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "set-holder-position",
-        [
-          types.principal(holder),
-          types.principal(position),
-          types.uint(amount * 1000000),
-          types.uint(cumm),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    cumm: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "set-holder-position",
+      [
+        Cl.principal(holder),
+        Cl.principal(position),
+        Cl.uint(amount * 1_000_000),
+        Cl.uint(cumm),
+      ],
+      caller,
+    ).result;
   }
 
-  addHolder(caller: Account, holder: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "add-holder",
-        [types.principal(holder)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  addHolder(caller: string, holder: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "add-holder",
+      [Cl.principal(holder)],
+      caller,
+    ).result;
   }
 
-  updateHolderPosition(caller: Account, holder: string, position: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "update-holder-position",
-        [types.principal(holder), types.principal(position)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  updateHolderPosition(caller: string, holder: string, position: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "update-holder-position",
+      [Cl.principal(holder), Cl.principal(position)],
+      caller,
+    ).result;
   }
 
   updateHolderPositionAmount(
-    caller: Account,
+    caller: string,
     holder: string,
     position: string,
-    amount: number
-  ) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "update-holder-position-amount",
-        [
-          types.principal(holder),
-          types.principal(position),
-          types.uint(amount * 1000000),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    amount: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "update-holder-position-amount",
+      [
+        Cl.principal(holder),
+        Cl.principal(position),
+        Cl.uint(amount * 1_000_000),
+      ],
+      caller,
+    ).result;
   }
 
   updateSupportedPositionsTotal(
-    caller: Account,
+    caller: string,
     position: string,
-    total: number
-  ) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-data-v2",
-        "update-supported-positions-total",
-        [types.principal(position), types.uint(total * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    total: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-data-v2",
+      "update-supported-positions-total",
+      [Cl.principal(position), Cl.uint(total * 1_000_000)],
+      caller,
+    ).result;
   }
 }
-export { StStxBtcTrackingData };

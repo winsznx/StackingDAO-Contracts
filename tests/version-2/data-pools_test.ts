@@ -1,221 +1,178 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { DataPools } from '../wrappers/data-pools-helpers.ts';
+import { qualifiedName, tupleField } from "../wrappers/tests-utils";
+import { DataPools } from "../wrappers/data-pools-helpers";
 
-//-------------------------------------
-// Protocol 
-//-------------------------------------
-
-Clarinet.test({
-  name: "data-pools: protocol can update standard commission",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let dataPools = new DataPools(chain, deployer);
-
-    let call = await dataPools.getStandardCommission();
-    call.result.expectUint(500);
-
-    call = await dataPools.getPoolCommission(qualifiedName("some-pool"))
-    call.result.expectUint(500);
-
-    call = await dataPools.getPoolCommission(qualifiedName("stacking-pool-v1"))
-    call.result.expectUint(500);
-
-    let result = dataPools.setStandardCommission(deployer, 1000);
-    result.expectOk().expectBool(true);
-
-    call = await dataPools.getStandardCommission();
-    call.result.expectUint(1000);
-
-    call = await dataPools.getPoolCommission(qualifiedName("some-pool"))
-    call.result.expectUint(1000);
-
-    call = await dataPools.getPoolCommission(qualifiedName("stacking-pool-v1"))
-    call.result.expectUint(500);
-  }
-});
-
-Clarinet.test({
-  name: "data-pools: protocol can update pool commission",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let dataPools = new DataPools(chain, deployer);
-
-    let call = await dataPools.getPoolCommission(qualifiedName("stacking-pool-v1"))
-    call.result.expectUint(500);
-
-    let result = dataPools.setPoolCommission(deployer, qualifiedName("stacking-pool-v1"), 100);
-    result.expectOk().expectBool(true);
-
-    call = await dataPools.getPoolCommission(qualifiedName("stacking-pool-v1"))
-    call.result.expectUint(100);
-  }
-});
-
-Clarinet.test({
-  name: "data-pools: protocol can update pool owner commission",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let dataPools = new DataPools(chain, deployer);
-
-    let call = await dataPools.getPoolOwnerCommission(qualifiedName("stacking-pool-v1"))
-    call.result.expectTuple()["receiver"].expectPrincipal(qualifiedName("rewards-v1"));
-    call.result.expectTuple()["share"].expectUint(0);
-
-    let result = dataPools.setPoolOwnerCommission(deployer, qualifiedName("stacking-pool-v1"), wallet_1.address, 0.25)
-    result.expectOk().expectBool(true);
-
-    call = await dataPools.getPoolOwnerCommission(qualifiedName("stacking-pool-v1"))
-    call.result.expectTuple()["receiver"].expectPrincipal(wallet_1.address);
-    call.result.expectTuple()["share"].expectUint(0.25 * 10000);
-  }
-});
-
-Clarinet.test({
-  name: "data-pools: protocol can update active pools list",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let dataPools = new DataPools(chain, deployer);
-
-    let call = await dataPools.getActivePools();
-    call.result.expectList()[0].expectPrincipal(qualifiedName("stacking-pool-v1"));
-    call.result.expectList()[1].expectPrincipal(qualifiedName("pox-fast-pool-v2-mock"));
-
-    let result = dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-v1"), qualifiedName("new-pool-v1")]);
-    result.expectOk().expectBool(true);
-
-    call = await dataPools.getActivePools();
-    call.result.expectList()[0].expectPrincipal(qualifiedName("stacking-pool-v1"));
-    call.result.expectList()[1].expectPrincipal(qualifiedName("new-pool-v1"));
-  }
-});
-
-Clarinet.test({
-  name: "data-pools: protocol can update pool share",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let dataPools = new DataPools(chain, deployer);
-
-    let call = await dataPools.getPoolShare(qualifiedName("stacking-pool-v1"));
-    call.result.expectUint(7000);
-
-    let result = dataPools.setPoolShare(deployer, qualifiedName("stacking-pool-v1"), 9000);
-    result.expectOk().expectBool(true);
-
-    call = await dataPools.getPoolShare(qualifiedName("stacking-pool-v1"));
-    call.result.expectUint(9000);
-  }
-});
-
-Clarinet.test({
-  name: "data-pools: protocol can update pool delegates",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let dataPools = new DataPools(chain, deployer);
-
-    let call = await dataPools.getPoolDelegates(qualifiedName("stacking-pool-v1"))
-    call.result.expectList()[0].expectPrincipal(qualifiedName("stacking-delegate-1-1"));
-    call.result.expectList()[1].expectPrincipal(qualifiedName("stacking-delegate-1-2"));
-    call.result.expectList()[2].expectPrincipal(qualifiedName("stacking-delegate-1-3"));
-
-    let result = dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-v1"), [qualifiedName("stacking-delegate-3-1"), qualifiedName("stacking-delegate-3-2")])
-    result.expectOk().expectBool(true);
-
-    call = await dataPools.getPoolDelegates(qualifiedName("stacking-pool-v1"));
-    call.result.expectList()[0].expectPrincipal(qualifiedName("stacking-delegate-3-1"));
-    call.result.expectList()[1].expectPrincipal(qualifiedName("stacking-delegate-3-2"));
-  }
-});
-
-Clarinet.test({
-  name: "data-pools: protocol can update delegate share",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let dataPools = new DataPools(chain, deployer);
-
-    let call = await dataPools.getDelegateShare(qualifiedName("stacking-delegate-1-1"));
-    call.result.expectUint(5000);
-
-    let result = dataPools.setDelegateShare(deployer, qualifiedName("stacking-delegate-1-1"), 4000);
-    result.expectOk().expectBool(true);
-
-    call = await dataPools.getDelegateShare(qualifiedName("stacking-delegate-1-1"));
-    call.result.expectUint(4000);
-  }
-});
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
 
 //-------------------------------------
-// Errors 
+// Protocol
 //-------------------------------------
 
-Clarinet.test({
-  name: "data-pools: can not set pool owner share above 100%",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+describe("data-pools", () => {
+  it("data-pools: protocol can update standard commission", () => {
+    const dataPools = new DataPools(deployer);
 
-    let dataPools = new DataPools(chain, deployer);
+    expect(dataPools.getStandardCommission()).toBeUint(500);
 
-    let result = dataPools.setPoolOwnerCommission(deployer, qualifiedName("stacking-pool-v1"), wallet_1.address, 1.1)
-    result.expectErr().expectUint(2011001);
-  }
-});
+    expect(dataPools.getPoolCommission(qualifiedName("some-pool"))).toBeUint(500);
 
-Clarinet.test({
-  name: "data-pools: can not set commission above 40%",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(dataPools.getPoolCommission(qualifiedName("stacking-pool-v1"))).toBeUint(500);
 
-    let dataPools = new DataPools(chain, deployer);
+    expect(dataPools.setStandardCommission(deployer, 1000)).toBeOk(Cl.bool(true));
 
-    let result = dataPools.setStandardCommission(deployer, 4001);
-    result.expectErr().expectUint(2011002);
+    expect(dataPools.getStandardCommission()).toBeUint(1000);
 
-    result = dataPools.setPoolCommission(deployer, qualifiedName("stacking-pool-v1"), 4001);
-    result.expectErr().expectUint(2011002);
-  }
-});
+    expect(dataPools.getPoolCommission(qualifiedName("some-pool"))).toBeUint(1000);
 
-//-------------------------------------
-// Access 
-//-------------------------------------
+    expect(dataPools.getPoolCommission(qualifiedName("stacking-pool-v1"))).toBeUint(500);
+  });
 
-Clarinet.test({
-  name: "data-pools: only protocol can use setters",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("data-pools: protocol can update pool commission", () => {
+    const dataPools = new DataPools(deployer);
 
-    let dataPools = new DataPools(chain, deployer);
+    expect(dataPools.getPoolCommission(qualifiedName("stacking-pool-v1"))).toBeUint(500);
 
-    let result = dataPools.setStandardCommission(wallet_1, 1000);
-    result.expectErr().expectUint(20003);
+    expect(
+      dataPools.setPoolCommission(deployer, qualifiedName("stacking-pool-v1"), 100),
+    ).toBeOk(Cl.bool(true));
 
-    result = dataPools.setPoolCommission(wallet_1, qualifiedName("stacking-pool-v1"), 100);
-    result.expectErr().expectUint(20003);
+    expect(dataPools.getPoolCommission(qualifiedName("stacking-pool-v1"))).toBeUint(100);
+  });
 
-    result = dataPools.setPoolOwnerCommission(wallet_1, qualifiedName("stacking-pool-v1"), wallet_1.address, 0.25)
-    result.expectErr().expectUint(20003);
+  it("data-pools: protocol can update pool owner commission", () => {
+    const dataPools = new DataPools(deployer);
 
-    result = dataPools.setActivePools(wallet_1, [qualifiedName("stacking-pool-v1"), qualifiedName("new-pool-v1")]);
-    result.expectErr().expectUint(20003);
+    let owner = dataPools.getPoolOwnerCommission(qualifiedName("stacking-pool-v1"));
+    expect(tupleField(owner, "receiver")).toBePrincipal(qualifiedName("rewards-v1"));
+    expect(tupleField(owner, "share")).toBeUint(0);
 
-    result = dataPools.setPoolShare(wallet_1, qualifiedName("stacking-pool-v1"), 9000);
-    result.expectErr().expectUint(20003);
+    expect(
+      dataPools.setPoolOwnerCommission(deployer, qualifiedName("stacking-pool-v1"), wallet_1, 0.25),
+    ).toBeOk(Cl.bool(true));
 
-    result = dataPools.setPoolDelegates(wallet_1, qualifiedName("stacking-pool-v1"), [qualifiedName("stacking-delegate-3-1"), qualifiedName("stacking-delegate-3-2")])
-    result.expectErr().expectUint(20003);
+    owner = dataPools.getPoolOwnerCommission(qualifiedName("stacking-pool-v1"));
+    expect(tupleField(owner, "receiver")).toBePrincipal(wallet_1);
+    expect(tupleField(owner, "share")).toBeUint(0.25 * 10_000);
+  });
 
-    result = dataPools.setDelegateShare(wallet_1, qualifiedName("stacking-delegate-1-1"), 4000);
-    result.expectErr().expectUint(20003);
-  }
+  it("data-pools: protocol can update active pools list", () => {
+    const dataPools = new DataPools(deployer);
+
+    expect(dataPools.getActivePools()).toBeList([
+      Cl.principal(qualifiedName("stacking-pool-v1")),
+      Cl.principal(qualifiedName("pox-fast-pool-v2-mock")),
+    ]);
+
+    expect(
+      dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-v1"), qualifiedName("new-pool-v1")]),
+    ).toBeOk(Cl.bool(true));
+
+    expect(dataPools.getActivePools()).toBeList([
+      Cl.principal(qualifiedName("stacking-pool-v1")),
+      Cl.principal(qualifiedName("new-pool-v1")),
+    ]);
+  });
+
+  it("data-pools: protocol can update pool share", () => {
+    const dataPools = new DataPools(deployer);
+
+    expect(dataPools.getPoolShare(qualifiedName("stacking-pool-v1"))).toBeUint(7000);
+
+    expect(
+      dataPools.setPoolShare(deployer, qualifiedName("stacking-pool-v1"), 9000),
+    ).toBeOk(Cl.bool(true));
+
+    expect(dataPools.getPoolShare(qualifiedName("stacking-pool-v1"))).toBeUint(9000);
+  });
+
+  it("data-pools: protocol can update pool delegates", () => {
+    const dataPools = new DataPools(deployer);
+
+    expect(dataPools.getPoolDelegates(qualifiedName("stacking-pool-v1"))).toBeList([
+      Cl.principal(qualifiedName("stacking-delegate-1-1")),
+      Cl.principal(qualifiedName("stacking-delegate-1-2")),
+      Cl.principal(qualifiedName("stacking-delegate-1-3")),
+    ]);
+
+    expect(
+      dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-v1"), [qualifiedName("stacking-delegate-3-1"), qualifiedName("stacking-delegate-3-2")]),
+    ).toBeOk(Cl.bool(true));
+
+    expect(dataPools.getPoolDelegates(qualifiedName("stacking-pool-v1"))).toBeList([
+      Cl.principal(qualifiedName("stacking-delegate-3-1")),
+      Cl.principal(qualifiedName("stacking-delegate-3-2")),
+    ]);
+  });
+
+  it("data-pools: protocol can update delegate share", () => {
+    const dataPools = new DataPools(deployer);
+
+    expect(dataPools.getDelegateShare(qualifiedName("stacking-delegate-1-1"))).toBeUint(5000);
+
+    expect(
+      dataPools.setDelegateShare(deployer, qualifiedName("stacking-delegate-1-1"), 4000),
+    ).toBeOk(Cl.bool(true));
+
+    expect(dataPools.getDelegateShare(qualifiedName("stacking-delegate-1-1"))).toBeUint(4000);
+  });
+
+  //-------------------------------------
+  // Errors
+  //-------------------------------------
+
+  it("data-pools: can not set pool owner share above 100%", () => {
+    const dataPools = new DataPools(deployer);
+
+    expect(
+      dataPools.setPoolOwnerCommission(deployer, qualifiedName("stacking-pool-v1"), wallet_1, 1.1),
+    ).toBeErr(Cl.uint(2011001));
+  });
+
+  it("data-pools: can not set commission above 40%", () => {
+    const dataPools = new DataPools(deployer);
+
+    expect(dataPools.setStandardCommission(deployer, 4001)).toBeErr(Cl.uint(2011002));
+
+    expect(
+      dataPools.setPoolCommission(deployer, qualifiedName("stacking-pool-v1"), 4001),
+    ).toBeErr(Cl.uint(2011002));
+  });
+
+  //-------------------------------------
+  // Access
+  //-------------------------------------
+
+  it("data-pools: only protocol can use setters", () => {
+    const dataPools = new DataPools(deployer);
+
+    expect(dataPools.setStandardCommission(wallet_1, 1000)).toBeErr(Cl.uint(20003));
+
+    expect(
+      dataPools.setPoolCommission(wallet_1, qualifiedName("stacking-pool-v1"), 100),
+    ).toBeErr(Cl.uint(20003));
+
+    expect(
+      dataPools.setPoolOwnerCommission(wallet_1, qualifiedName("stacking-pool-v1"), wallet_1, 0.25),
+    ).toBeErr(Cl.uint(20003));
+
+    expect(
+      dataPools.setActivePools(wallet_1, [qualifiedName("stacking-pool-v1"), qualifiedName("new-pool-v1")]),
+    ).toBeErr(Cl.uint(20003));
+
+    expect(
+      dataPools.setPoolShare(wallet_1, qualifiedName("stacking-pool-v1"), 9000),
+    ).toBeErr(Cl.uint(20003));
+
+    expect(
+      dataPools.setPoolDelegates(wallet_1, qualifiedName("stacking-pool-v1"), [qualifiedName("stacking-delegate-3-1"), qualifiedName("stacking-delegate-3-2")]),
+    ).toBeErr(Cl.uint(20003));
+
+    expect(
+      dataPools.setDelegateShare(wallet_1, qualifiedName("stacking-delegate-1-1"), 4000),
+    ).toBeErr(Cl.uint(20003));
+  });
 });

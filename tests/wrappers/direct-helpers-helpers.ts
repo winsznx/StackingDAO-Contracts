@@ -1,120 +1,94 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "./tests-utils.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
+import { qualifiedName } from "./tests-utils";
 
 // ---------------------------------------------------------
 // Direct Helpers
 // ---------------------------------------------------------
 
-class DirectHelpers {
-  chain: Chain;
-  deployer: Account;
+export class DirectHelpers {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
   addDirectStacking(
-    caller: Account,
+    caller: string,
     user: string,
     pool: string | undefined,
-    amount: number
-  ) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "direct-helpers-v4",
-        "add-direct-stacking",
-        [
-          types.principal(user),
-          pool == undefined ? types.none() : types.some(types.principal(pool)),
-          types.uint(amount * 1000000),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    amount: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "direct-helpers-v4",
+      "add-direct-stacking",
+      [
+        Cl.principal(user),
+        pool == undefined ? Cl.none() : Cl.some(Cl.principal(pool)),
+        Cl.uint(amount * 1_000_000),
+      ],
+      caller,
+    ).result;
   }
 
-  subtractDirectStacking(caller: Account, user: string, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "direct-helpers-v4",
-        "subtract-direct-stacking",
-        [types.principal(user), types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  subtractDirectStacking(caller: string, user: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "direct-helpers-v4",
+      "subtract-direct-stacking",
+      [Cl.principal(user), Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  stopDirectStacking(caller: Account, user: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "direct-helpers-v4",
-        "stop-direct-stacking",
-        [types.principal(user)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  stopDirectStacking(caller: string, user: string): ClarityValue {
+    return simnet.callPublicFn(
+      "direct-helpers-v4",
+      "stop-direct-stacking",
+      [Cl.principal(user)],
+      caller,
+    ).result;
   }
 
-  subtractDirectStackingUser(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "direct-helpers-v4",
-        "subtract-direct-stacking-user",
-        [types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  subtractDirectStackingUser(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "direct-helpers-v4",
+      "subtract-direct-stacking-user",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  stopDirectStackingUser(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "direct-helpers-v4",
-        "stop-direct-stacking-user",
-        [],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  stopDirectStackingUser(caller: string): ClarityValue {
+    return simnet.callPublicFn(
+      "direct-helpers-v4",
+      "stop-direct-stacking-user",
+      [],
+      caller,
+    ).result;
   }
 
-  calculateDirectStackingInfo(protocols: string[], user: string) {
-    return this.chain.callReadOnlyFn(
+  calculateDirectStackingInfo(protocols: string[], user: string): ClarityValue {
+    return simnet.callPublicFn(
       "direct-helpers-v4",
       "calculate-direct-stacking-info",
       [
-        types.principal(qualifiedName("reserve-v1")),
-        types.list(protocols.map((protocol) => types.principal(protocol))),
-        types.principal(user),
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.list(protocols.map((protocol) => Cl.principal(protocol))),
+        Cl.principal(user),
       ],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  updateDirectStacking(caller: Account, protocols: string[], user: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "direct-helpers-v4",
-        "update-direct-stacking",
-        [
-          types.principal(qualifiedName("reserve-v1")),
-          types.list(protocols.map((protocol) => types.principal(protocol))),
-          types.principal(user),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  updateDirectStacking(caller: string, protocols: string[], user: string): ClarityValue {
+    return simnet.callPublicFn(
+      "direct-helpers-v4",
+      "update-direct-stacking",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.list(protocols.map((protocol) => Cl.principal(protocol))),
+        Cl.principal(user),
+      ],
+      caller,
+    ).result;
   }
 }
-export { DirectHelpers };

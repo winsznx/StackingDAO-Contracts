@@ -1,52 +1,32 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "./tests-utils.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
+import { qualifiedName } from "./tests-utils";
 
 // ---------------------------------------------------------
 // Swap stSTX / stSTXbtc
 // ---------------------------------------------------------
 
-class SwapStStxBtc {
-  chain: Chain;
-  deployer: Account;
+export class SwapStStxBtc {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  swapStStxForStStxBtc(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "swap-ststx-ststxbtc-v2",
-        "swap-ststx-for-ststxbtc",
-        [
-          types.uint(amount * 1000000),
-          types.principal(qualifiedName("reserve-v1")),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  swapStStxForStStxBtc(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "swap-ststx-ststxbtc-v2",
+      "swap-ststx-for-ststxbtc",
+      [Cl.uint(amount * 1_000_000), Cl.principal(qualifiedName("reserve-v1"))],
+      caller,
+    ).result;
   }
 
-  swapStStxBtcForStStx(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "swap-ststx-ststxbtc-v2",
-        "swap-ststxbtc-for-ststx",
-        [
-          types.uint(amount * 1000000),
-          types.principal(qualifiedName("reserve-v1")),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  swapStStxBtcForStStx(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "swap-ststx-ststxbtc-v2",
+      "swap-ststxbtc-for-ststx",
+      [Cl.uint(amount * 1_000_000), Cl.principal(qualifiedName("reserve-v1"))],
+      caller,
+    ).result;
   }
 }
-export { SwapStStxBtc };

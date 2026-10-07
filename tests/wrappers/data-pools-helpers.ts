@@ -1,127 +1,147 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // Data Pools
 // ---------------------------------------------------------
 
-class DataPools {
-  chain: Chain;
-  deployer: Account;
+export class DataPools {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getStandardCommission() {
-    return this.chain.callReadOnlyFn("data-pools-v1", "get-standard-commission", [
-    ], this.deployer.address);
+  getStandardCommission(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-pools-v1",
+      "get-standard-commission",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getPoolCommission(pool: string) {
-    return this.chain.callReadOnlyFn("data-pools-v1", "get-pool-commission", [
-        types.principal(pool)
-    ], this.deployer.address);
+  getPoolCommission(pool: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-pools-v1",
+      "get-pool-commission",
+      [Cl.principal(pool)],
+      this.deployer,
+    ).result;
   }
 
-  getPoolOwnerCommission(pool: string) {
-    return this.chain.callReadOnlyFn("data-pools-v1", "get-pool-owner-commission", [
-        types.principal(pool)
-    ], this.deployer.address);
+  getPoolOwnerCommission(pool: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-pools-v1",
+      "get-pool-owner-commission",
+      [Cl.principal(pool)],
+      this.deployer,
+    ).result;
   }
 
-  setStandardCommission(caller: Account, commission: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-pools-v1", "set-standard-commission", [
-        types.uint(commission)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setStandardCommission(caller: string, commission: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-pools-v1",
+      "set-standard-commission",
+      [Cl.uint(commission)],
+      caller,
+    ).result;
   }
 
-  setPoolCommission(caller: Account, pool: string, commission: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-pools-v1", "set-pool-commission", [
-        types.principal(pool),
-        types.uint(commission)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setPoolCommission(caller: string, pool: string, commission: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-pools-v1",
+      "set-pool-commission",
+      [Cl.principal(pool), Cl.uint(commission)],
+      caller,
+    ).result;
   }
 
-  setPoolOwnerCommission(caller: Account, pool: string, receiver: string, share: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-pools-v1", "set-pool-owner-commission", [
-        types.principal(pool),
-        types.principal(receiver),
-        types.uint(share * 10000)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setPoolOwnerCommission(
+    caller: string,
+    pool: string,
+    receiver: string,
+    share: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "data-pools-v1",
+      "set-pool-owner-commission",
+      [Cl.principal(pool), Cl.principal(receiver), Cl.uint(share * 10_000)],
+      caller,
+    ).result;
   }
 
-  getActivePools() {
-    return this.chain.callReadOnlyFn("data-pools-v1", "get-active-pools", [
-    ], this.deployer.address);
+  getActivePools(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-pools-v1",
+      "get-active-pools",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getPoolShare(pool: string) {
-    return this.chain.callReadOnlyFn("data-pools-v1", "get-pool-share", [
-      types.principal(pool),
-    ], this.deployer.address);
+  getPoolShare(pool: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-pools-v1",
+      "get-pool-share",
+      [Cl.principal(pool)],
+      this.deployer,
+    ).result;
   }
 
-  getPoolDelegates(pool: string) {
-    return this.chain.callReadOnlyFn("data-pools-v1", "get-pool-delegates", [
-      types.principal(pool),
-    ], this.deployer.address);
+  getPoolDelegates(pool: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-pools-v1",
+      "get-pool-delegates",
+      [Cl.principal(pool)],
+      this.deployer,
+    ).result;
   }
 
-  getDelegateShare(delegate: string) {
-    return this.chain.callReadOnlyFn("data-pools-v1", "get-delegate-share", [
-      types.principal(delegate),
-    ], this.deployer.address);
+  getDelegateShare(delegate: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "data-pools-v1",
+      "get-delegate-share",
+      [Cl.principal(delegate)],
+      this.deployer,
+    ).result;
   }
 
-  setActivePools(caller: Account, pools: string[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-pools-v1", "set-active-pools", [
-        types.list(pools.map(pool => types.principal(pool))),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setActivePools(caller: string, pools: string[]): ClarityValue {
+    return simnet.callPublicFn(
+      "data-pools-v1",
+      "set-active-pools",
+      [Cl.list(pools.map((pool) => Cl.principal(pool)))],
+      caller,
+    ).result;
   }
 
-  setPoolShare(caller: Account, pool: string, share: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-pools-v1", "set-pool-share", [
-        types.principal(pool),
-        types.uint(share)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setPoolShare(caller: string, pool: string, share: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-pools-v1",
+      "set-pool-share",
+      [Cl.principal(pool), Cl.uint(share)],
+      caller,
+    ).result;
   }
 
-  setPoolDelegates(caller: Account, pool: string, delegates: string[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-pools-v1", "set-pool-delegates", [
-        types.principal(pool),
-        types.list(delegates.map(delegate => types.principal(delegate))),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setPoolDelegates(caller: string, pool: string, delegates: string[]): ClarityValue {
+    return simnet.callPublicFn(
+      "data-pools-v1",
+      "set-pool-delegates",
+      [
+        Cl.principal(pool),
+        Cl.list(delegates.map((delegate) => Cl.principal(delegate))),
+      ],
+      caller,
+    ).result;
   }
 
-  setDelegateShare(caller: Account, delegate: string, share: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("data-pools-v1", "set-delegate-share", [
-        types.principal(delegate),
-        types.uint(share)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setDelegateShare(caller: string, delegate: string, share: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-pools-v1",
+      "set-delegate-share",
+      [Cl.principal(delegate), Cl.uint(share)],
+      caller,
+    ).result;
   }
-
 }
-export { DataPools };

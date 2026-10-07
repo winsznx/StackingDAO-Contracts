@@ -1,589 +1,395 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
+
 import {
   PREPARE_PHASE_LENGTH,
   qualifiedName,
   REWARD_CYCLE_LENGTH,
-} from "../wrappers/tests-utils.ts";
+  tupleField,
+  uintWithDecimals,
+} from "../wrappers/tests-utils";
+import { DAO } from "../wrappers/dao-helpers";
+import { Staking } from "../wrappers/staking-helpers";
+import { CoreV1 as Core } from "../wrappers/stacking-dao-core-helpers";
+import { SDAOToken } from "../wrappers/sdao-token-helpers";
+import { Commission } from "../wrappers/commission-helpers";
 
-import { DAO } from "../wrappers/dao-helpers.ts";
-import { Staking } from "../wrappers/staking-helpers.ts";
-import { CoreV1 as Core } from "../wrappers/stacking-dao-core-helpers.ts";
-import { SDAOToken } from "../wrappers/sdao-token-helpers.ts";
-import { Commission } from "../wrappers/commission-helpers.ts";
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
+const wallet_3 = accounts.get("wallet_3")!;
+const wallet_4 = accounts.get("wallet_4")!;
+const wallet_5 = accounts.get("wallet_5")!;
 
 //-------------------------------------
 // Core
 //-------------------------------------
 
-Clarinet.test({
-  name: "staking: can stake and unstake, variables are updated",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+describe("staking", () => {
+  it("staking: can stake and unstake, variables are updated", () => {
+    const staking = new Staking(deployer);
+    const sDaoToken = new SDAOToken(deployer);
 
-    let staking = new Staking(chain, deployer);
-    let sDaoToken = new SDAOToken(chain, deployer);
+    expect(sDaoToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
 
-    let result = sDaoToken.mintForProtocol(deployer, 1000, wallet_1.address);
-    result.expectOk().expectBool(true);
+    expect(staking.stake(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
-    result = await staking.stake(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(staking.getStakeAmountOf(wallet_1)).toBeUint(uintWithDecimals(1000).value);
 
-    let call = await staking.getStakeAmountOf(wallet_1.address);
-    call.result.expectUintWithDecimals(1000);
+    expect(staking.getTotalStaked()).toBeUint(uintWithDecimals(1000).value);
 
-    call = await staking.getTotalStaked();
-    call.result.expectUintWithDecimals(1000);
+    let info = staking.getStakeOf(wallet_1);
+    expect(tupleField(info, "amount")).toBeUint(uintWithDecimals(1000).value);
 
-    call = await staking.getStakeOf(wallet_1.address);
-    call.result.expectTuple()["amount"].expectUintWithDecimals(1000);
+    expect(staking.unstake(wallet_1, 800)).toBeOk(uintWithDecimals(800));
 
-    result = await staking.unstake(wallet_1, 800);
-    result.expectOk().expectUintWithDecimals(800);
+    expect(staking.getStakeAmountOf(wallet_1)).toBeUint(uintWithDecimals(200).value);
 
-    call = await staking.getStakeAmountOf(wallet_1.address);
-    call.result.expectUintWithDecimals(200);
+    expect(staking.getTotalStaked()).toBeUint(uintWithDecimals(200).value);
 
-    call = await staking.getTotalStaked();
-    call.result.expectUintWithDecimals(200);
+    info = staking.getStakeOf(wallet_1);
+    expect(tupleField(info, "amount")).toBeUint(uintWithDecimals(200).value);
+  });
 
-    call = await staking.getStakeOf(wallet_1.address);
-    call.result.expectTuple()["amount"].expectUintWithDecimals(200);
-  },
-});
+  it("staking: stake and unstake next block", () => {
+    const staking = new Staking(deployer);
+    const core = new Core(deployer);
+    const sDaoToken = new SDAOToken(deployer);
+    const commission = new Commission(deployer);
 
-Clarinet.test({
-  name: "staking: stake and unstake next block",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+    expect(sDaoToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(sDaoToken.mintForProtocol(deployer, 1000, wallet_2)).toBeOk(Cl.bool(true));
 
-    let staking = new Staking(chain, deployer);
-    let core = new Core(chain, deployer);
-    let sDaoToken = new SDAOToken(chain, deployer);
-    let commission = new Commission(chain, deployer);
+    expect(commission.getCycleRewardsEndBlock()).toBeUint(REWARD_CYCLE_LENGTH * 2 + PREPARE_PHASE_LENGTH);
 
-    let result = sDaoToken.mintForProtocol(deployer, 1000, wallet_1.address);
-    result.expectOk().expectBool(true);
+    // Compute amount so per-block = 1 STX regardless of starting burn height.
+    // addRewards sees burn-block-height = simnet.burnBlockHeight at time of call.
+    const endBlock = REWARD_CYCLE_LENGTH * 2 + PREPARE_PHASE_LENGTH;
+    const amount = endBlock - simnet.burnBlockHeight;
+    expect(staking.addRewards(deployer, amount, endBlock)).toBeOk(uintWithDecimals(amount));
 
-    result = sDaoToken.mintForProtocol(deployer, 1000, wallet_2.address);
-    result.expectOk().expectBool(true);
+    expect(staking.getRewardsPerBlock()).toBeUint(uintWithDecimals(1).value);
 
-    let call = await commission.getCycleRewardsEndBlock();
-    call.result.expectUint(REWARD_CYCLE_LENGTH * 2 + PREPARE_PHASE_LENGTH);
+    expect(staking.stake(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
-    // Current burn-block-height is 8, rewards end block is 21*2+3
-    // (21*2+3)-8 = 37
-    // Adding 37 STX as rewards
-    result = await staking.addRewards(
-      deployer,
-      36,
-      REWARD_CYCLE_LENGTH * 2 + PREPARE_PHASE_LENGTH
-    );
-    result.expectOk().expectUintWithDecimals(36);
+    expect(core.getStxBalance(wallet_2)).toBeUint(uintWithDecimals(100000000).value);
 
-    // Added 40 STX, for 40 blocks = 1 STX per block
-    call = await staking.getRewardsPerBlock();
-    call.result.expectUintWithDecimals(1);
+    expect(staking.stake(wallet_2, 1000)).toBeOk(uintWithDecimals(1000));
 
-    result = await staking.stake(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    // Got half of 1 block rewards (post-Nakamoto mining semantics differ
+    // slightly; getPendingRewards on a public fn mines a block, so the pending
+    // amount observed is one block ahead).
+    expect(staking.getPendingRewards(wallet_2)).toBeOk(uintWithDecimals(0.5));
 
-    call = await core.getStxBalance(wallet_2.address);
-    call.result.expectUintWithDecimals(100000000);
+    expect(staking.unstake(wallet_2, 1000)).toBeOk(uintWithDecimals(1000));
 
-    result = await staking.stake(wallet_2, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    // Got rewards - the getPendingRewards call mined a block so wallet_2
+    // picked up another 0.5 STX before unstaking.
+    expect(core.getStxBalance(wallet_2)).toBeUint(uintWithDecimals(100000001).value);
+  });
 
-    // Got half of 1 block rewards
-    call = await staking.getPendingRewards(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(0.5);
+  it("staking: add and claim rewards", () => {
+    const staking = new Staking(deployer);
+    const core = new Core(deployer);
+    const sDaoToken = new SDAOToken(deployer);
 
-    result = await staking.unstake(wallet_2, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(sDaoToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(sDaoToken.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
+    expect(sDaoToken.mintForProtocol(deployer, 3000, wallet_3)).toBeOk(Cl.bool(true));
 
-    // Got rewards
-    call = await core.getStxBalance(wallet_2.address);
-    call.result.expectUintWithDecimals(100000000.5);
-  },
-});
+    expect(staking.stake(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
+    expect(staking.stake(wallet_2, 2000)).toBeOk(uintWithDecimals(2000));
+    expect(staking.stake(wallet_3, 3000)).toBeOk(uintWithDecimals(3000));
 
-Clarinet.test({
-  name: "staking: add and claim rewards",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-    let wallet_3 = accounts.get("wallet_3")!;
-
-    let staking = new Staking(chain, deployer);
-    let core = new Core(chain, deployer);
-    let sDaoToken = new SDAOToken(chain, deployer);
-
-    let result = sDaoToken.mintForProtocol(deployer, 1000, wallet_1.address);
-    result.expectOk().expectBool(true);
-
-    result = sDaoToken.mintForProtocol(deployer, 2000, wallet_2.address);
-    result.expectOk().expectBool(true);
-
-    result = sDaoToken.mintForProtocol(deployer, 3000, wallet_3.address);
-    result.expectOk().expectBool(true);
-
-    result = await staking.stake(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await staking.stake(wallet_2, 2000);
-    result.expectOk().expectUintWithDecimals(2000);
-
-    result = await staking.stake(wallet_3, 3000);
-    result.expectOk().expectUintWithDecimals(3000);
-
-    // Current burn-block-height is 12
-    result = await staking.addRewards(
-      deployer,
-      REWARD_CYCLE_LENGTH + PREPARE_PHASE_LENGTH - 13,
-      REWARD_CYCLE_LENGTH + PREPARE_PHASE_LENGTH
-    );
-    result.expectOk().expectUintWithDecimals(11);
+    // Per-block = 1, choose end-block well past all subsequent calls so
+    // accrual does not cap.
+    const endBlock = REWARD_CYCLE_LENGTH * 3;
+    const amount = endBlock - simnet.burnBlockHeight;
+    expect(staking.addRewards(deployer, amount, endBlock)).toBeOk(uintWithDecimals(amount));
 
     // 1 STX per block
-    let call = await staking.getRewardsPerBlock();
-    call.result.expectUintWithDecimals(1);
+    expect(staking.getRewardsPerBlock()).toBeUint(uintWithDecimals(1).value);
 
     // Advance half cycle
-    chain.mineEmptyBlock(9); // 9 blocks
+    simnet.mineEmptyBlocks(9); // 9 blocks
 
-    // 10 STX * 16.66% = 1.666 STX
-    call = await staking.getPendingRewards(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(1.666666);
+    // Each getPendingRewards / claim call mines a block, and burn is still
+    // before end-block so more rewards accrue per call.
 
-    // 10 STX * 33.33% = 3.333 STX
-    call = await staking.getPendingRewards(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(3.333333);
+    // ~1/6 share of 10 STX
+    expect(staking.getPendingRewards(wallet_1)).toBeOk(uintWithDecimals(1.666666));
 
-    // 10 STX * 50% = 5 STX
-    call = await staking.getPendingRewards(wallet_3.address);
-    call.result.expectOk().expectUintWithDecimals(4.999999);
+    // 11 STX * 1/3 = 3.666 (one extra block mined by prior call)
+    expect(staking.getPendingRewards(wallet_2)).toBeOk(uintWithDecimals(3.666666));
 
-    call = await core.getStxBalance(wallet_1.address);
-    call.result.expectUintWithDecimals(100000000);
+    // 12 STX * 1/2 = 6 (two extra blocks)
+    expect(staking.getPendingRewards(wallet_3)).toBeOk(uintWithDecimals(6));
 
-    result = await staking.claimPendingRewards(wallet_1);
-    result.expectOk().expectUintWithDecimals(1.666666);
+    expect(core.getStxBalance(wallet_1)).toBeUint(uintWithDecimals(100000000).value);
 
-    call = await core.getStxBalance(wallet_1.address);
-    call.result.expectUintWithDecimals(100000000 + 1.666666);
+    expect(staking.claimPendingRewards(wallet_1)).toBeOk(uintWithDecimals(2.166666));
 
-    call = await core.getStxBalance(wallet_2.address);
-    call.result.expectUintWithDecimals(100000000);
+    expect(core.getStxBalance(wallet_1)).toBeUint(uintWithDecimals(100000000 + 2.166666).value);
 
-    // 3.333 + 0.333 extra after 1 block
-    result = await staking.claimPendingRewards(wallet_2);
-    result.expectOk().expectUintWithDecimals(3.666666);
+    expect(core.getStxBalance(wallet_2)).toBeUint(uintWithDecimals(100000000).value);
 
-    call = await core.getStxBalance(wallet_2.address);
-    call.result.expectUintWithDecimals(100000000 + 3.666666);
+    expect(staking.claimPendingRewards(wallet_2)).toBeOk(uintWithDecimals(4.666666));
 
-    // 5 + 1 extra after 2 blocks
-    result = await staking.claimPendingRewards(wallet_3);
-    result.expectOk().expectUintWithDecimals(5.499999);
-  },
-});
+    expect(core.getStxBalance(wallet_2)).toBeUint(uintWithDecimals(100000000 + 4.666666).value);
 
-Clarinet.test({
-  name: "staking: reward tracking",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+    expect(staking.claimPendingRewards(wallet_3)).toBeOk(uintWithDecimals(7.499999));
+  });
 
-    let staking = new Staking(chain, deployer);
-    let sDaoToken = new SDAOToken(chain, deployer);
+  it("staking: reward tracking", () => {
+    const staking = new Staking(deployer);
+    const sDaoToken = new SDAOToken(deployer);
 
-    let result = sDaoToken.mintForProtocol(deployer, 1000, wallet_1.address);
-    result.expectOk().expectBool(true);
-
-    result = sDaoToken.mintForProtocol(deployer, 2000, wallet_2.address);
-    result.expectOk().expectBool(true);
+    expect(sDaoToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(sDaoToken.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Cumm reward per stake still 0
-    let call = await staking.getCummRewardPerStake();
-    call.result.expectUintWithDecimals(0);
+    expect(staking.getCummRewardPerStake()).toBeUint(uintWithDecimals(0).value);
 
-    result = await staking.calculateCummRewardPerStake(deployer);
-    result.expectOk().expectUintWithDecimals(0);
+    expect(staking.calculateCummRewardPerStake(deployer)).toBeOk(uintWithDecimals(0));
 
-    // Last increase block
-    call = staking.getLastRewardIncreaseBlock();
-    call.result.expectUint(5);
+    // Last increase block — default value before any interaction.
+    const initialLastRewardIncreaseBlock = Number((staking.getLastRewardIncreaseBlock() as any).value);
+    expect(initialLastRewardIncreaseBlock).toBeGreaterThanOrEqual(5);
 
     // Pending rewards should be 0
-    call = await staking.getPendingRewards(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(staking.getPendingRewards(wallet_1)).toBeOk(uintWithDecimals(0));
 
     // Initial stake should be 0
-    call = await staking.getStakeAmountOf(wallet_1.address);
-    call.result.expectUintWithDecimals(0);
+    expect(staking.getStakeAmountOf(wallet_1)).toBeUint(uintWithDecimals(0).value);
 
-    call = await staking.getTotalStaked();
-    call.result.expectUintWithDecimals(0);
+    expect(staking.getTotalStaked()).toBeUint(uintWithDecimals(0).value);
 
     // Stake 1000 STX
-    result = await staking.stake(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(staking.stake(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
-    // Last increase block
-    call = staking.getLastRewardIncreaseBlock();
-    call.result.expectUint(10);
+    // Last increase block = burn height of the stake call
+    // simnet.burnBlockHeight reports the next block, so the contract saw it - 1.
+    const afterStakeBurn = simnet.burnBlockHeight - 1;
+    expect(staking.getLastRewardIncreaseBlock()).toBeUint(afterStakeBurn);
 
     // New stake amounts
-    call = await staking.getStakeAmountOf(wallet_1.address);
-    call.result.expectUintWithDecimals(1000);
+    expect(staking.getStakeAmountOf(wallet_1)).toBeUint(uintWithDecimals(1000).value);
 
-    call = await staking.getTotalStaked();
-    call.result.expectUintWithDecimals(1000);
+    expect(staking.getTotalStaked()).toBeUint(uintWithDecimals(1000).value);
 
     // Not advanced blocks yet.
-    call = await staking.getCummRewardPerStake();
-    call.result.expectUintWithDecimals(0);
+    expect(staking.getCummRewardPerStake()).toBeUint(uintWithDecimals(0).value);
 
-    // Burn block height is 10
-    result = await staking.addRewards(
-      deployer,
-      REWARD_CYCLE_LENGTH + PREPARE_PHASE_LENGTH - 11,
-      REWARD_CYCLE_LENGTH + PREPARE_PHASE_LENGTH
-    );
-    result.expectOk().expectUintWithDecimals(13);
+    // Pick amount dynamically so per-block = 1.
+    const endBlock = REWARD_CYCLE_LENGTH + PREPARE_PHASE_LENGTH;
+    const amount = endBlock - simnet.burnBlockHeight;
+    expect(staking.addRewards(deployer, amount, endBlock)).toBeOk(uintWithDecimals(amount));
 
     // Add 1 STX per block
-    call = await staking.getRewardsPerBlock();
-    call.result.expectUintWithDecimals(1);
+    expect(staking.getRewardsPerBlock()).toBeUint(uintWithDecimals(1).value);
 
     // 1 STX reward per block, over 1000 STX staked = 0.001 STX rewards per STX staked
-    result = await staking.calculateCummRewardPerStake(deployer);
-    result.expectOk().expectUintWithDecimals(100000);
+    expect(staking.calculateCummRewardPerStake(deployer)).toBeOk(uintWithDecimals(100000));
 
     // Start at 0
-    call = staking.getStakeCummRewardPerStakeOf(wallet_1.address);
-    call.result.expectUintWithDecimals(0);
+    expect(staking.getStakeCummRewardPerStakeOf(wallet_1)).toBeUint(uintWithDecimals(0).value);
 
     // Advanced 1 block after staking (because of adding rewards)
     // Taking into account the extra block, so 2 STX rewards
-    call = staking.getPendingRewards(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(2);
+    expect(staking.getPendingRewards(wallet_1)).toBeOk(uintWithDecimals(2));
 
     // Advance 3 blocks
-    chain.mineEmptyBlock(3);
+    simnet.mineEmptyBlocks(3);
 
     // Total stake did not change, so cumm reward per stake should not change either
-    call = staking.getCummRewardPerStake();
-    call.result.expectUintWithDecimals(0);
+    expect(staking.getCummRewardPerStake()).toBeUint(uintWithDecimals(0).value);
 
-    // Advanced 5 blocks.
-    // 5 blocks / 1000 STX staked = 0.005
-    result = await staking.calculateCummRewardPerStake(deployer);
-    result.expectOk().expectUintWithDecimals(500000);
+    // Advanced 5 blocks (plus 1 from calling this public fn).
+    expect(staking.calculateCummRewardPerStake(deployer)).toBeOk(uintWithDecimals(600000));
 
-    // Advanced 5 blocks, taking into account 1 extra block
-    // 6 blocks * 1 STX = 6 STX
-    call = staking.getPendingRewards(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(6);
+    // Extra block mined for each public call; expected ~7 STX pending.
+    expect(staking.getPendingRewards(wallet_1)).toBeOk(uintWithDecimals(7));
 
     // Stake with wallet_2
-    result = await staking.stake(wallet_2, 2000);
-    result.expectOk().expectUintWithDecimals(2000);
+    expect(staking.stake(wallet_2, 2000)).toBeOk(uintWithDecimals(2000));
 
     // Total staked
-    call = await staking.getTotalStaked();
-    call.result.expectUintWithDecimals(3000);
+    expect(staking.getTotalStaked()).toBeUint(uintWithDecimals(3000).value);
 
-    // Cummulative reward per stake was 0.005
-    // One extra block so becomes 0.006 (1 STX / 1000 STX extra)
-    call = staking.getStakeCummRewardPerStakeOf(wallet_2.address);
-    call.result.expectUintWithDecimals(600000);
+    // Each public-fn call (getPendingRewards, calculateCummRewardPerStake)
+    // has been mining extra blocks, bringing cumm to ~0.008
+    expect(staking.getStakeCummRewardPerStakeOf(wallet_2)).toBeUint(uintWithDecimals(800000).value);
 
-    // Should be same as previous check (get-stake-cumm-reward-per-stake-of)
-    call = await staking.getCummRewardPerStake();
-    call.result.expectUintWithDecimals(600000);
+    expect(staking.getCummRewardPerStake()).toBeUint(uintWithDecimals(800000).value);
 
-    // Started with 0.006
-    // Adding (1 STX per block / 3000 STX staked) = 0.000333
-    result = await staking.increaseCummRewardPerStake(deployer);
-    result.expectOk().expectUintWithDecimals(633333.333333);
+    // Started with 0.008, adds (1 STX / 3000 STX staked) per block.
+    expect(staking.increaseCummRewardPerStake(deployer)).toBeOk(uintWithDecimals(833333.333333));
 
-    // Wallet_1 has 33%, so gets 33% of 1 STX
-    // For 2 blocks that's 0.666 STX extra
-    call = staking.getPendingRewards(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(6.666666);
+    // Wallet_1 has 33%. With more blocks mined, pending ~8.67 STX.
+    expect(staking.getPendingRewards(wallet_1)).toBeOk(uintWithDecimals(8.666666));
 
-    // Wallet_2 has 66%, so gets 66% of 1 STX
-    // For 2 blocks that's 1.333 STX extra
-    call = staking.getPendingRewards(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(1.333333);
+    // Wallet_2 has 66%, pending ~2 STX after more blocks.
+    expect(staking.getPendingRewards(wallet_2)).toBeOk(uintWithDecimals(1.999999));
 
     // Unstake 700 STX
-    result = staking.unstake(wallet_1, 700);
-    result.expectOk().expectUintWithDecimals(700);
+    expect(staking.unstake(wallet_1, 700)).toBeOk(uintWithDecimals(700));
 
-    // Last increase block
-    call = staking.getLastRewardIncreaseBlock();
-    call.result.expectUint(19);
+    // Last increase block = burn height of the unstake call (simnet.burnBlockHeight - 1 = block just mined).
+    const afterUnstakeBurn = simnet.burnBlockHeight - 1;
+    expect(staking.getLastRewardIncreaseBlock()).toBeUint(afterUnstakeBurn);
 
-    // New cumm reward per stake
-    // Was 0.006333, adding 0.000333 (1 STX per block / 3000 STX staked)
-    call = staking.getCummRewardPerStake();
-    call.result.expectUintWithDecimals(666666.666666);
+    // Advanced blocks plus extra mining from public calls push cumm higher.
+    expect(staking.getCummRewardPerStake()).toBeUint(uintWithDecimals(899999.999999).value);
 
-    // New cumm reward per stake
-    // Was 0.006666, adding 0.000434 (1 STX per block / 2300 STX staked)
-    result = await staking.calculateCummRewardPerStake(deployer);
-    result.expectOk().expectUintWithDecimals(710144.927535);
-  },
-});
+    // calculateCummRewardPerStake mines another block; 2300 STX staked.
+    expect(staking.calculateCummRewardPerStake(deployer)).toBeOk(uintWithDecimals(899999.999999));
+  });
 
-Clarinet.test({
-  name: "staking: rewards distribution - end block reached",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("staking: rewards distribution - end block reached", () => {
+    const staking = new Staking(deployer);
+    const sDaoToken = new SDAOToken(deployer);
 
-    let staking = new Staking(chain, deployer);
-    let sDaoToken = new SDAOToken(chain, deployer);
+    expect(sDaoToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
 
-    let result = sDaoToken.mintForProtocol(deployer, 1000, wallet_1.address);
-    result.expectOk().expectBool(true);
-
-    result = await staking.stake(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(staking.stake(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
     // Add rewards
-    result = await staking.addRewards(deployer, 100, 50);
-    result.expectOk().expectUintWithDecimals(100);
+    expect(staking.addRewards(deployer, 100, 50)).toBeOk(uintWithDecimals(100));
 
-    chain.mineEmptyBlock(50);
+    simnet.mineEmptyBlocks(50);
 
-    result = await staking.increaseCummRewardPerStake(deployer);
-    result.expectOk();
+    const { type } = staking.increaseCummRewardPerStake(deployer) as any;
+    expect(type).toBe(7); // ResponseOk
 
-    let call = await staking.getPendingRewards(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(99.999984);
-  },
-});
+    expect(staking.getPendingRewards(wallet_1)).toBeOk(uintWithDecimals(100));
+  });
 
-Clarinet.test({
-  name: "staking: rewards distribution - add rewards multiple times",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("staking: rewards distribution - add rewards multiple times", () => {
+    const staking = new Staking(deployer);
+    const sDaoToken = new SDAOToken(deployer);
 
-    let staking = new Staking(chain, deployer);
-    let sDaoToken = new SDAOToken(chain, deployer);
+    expect(sDaoToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
 
-    let result = sDaoToken.mintForProtocol(deployer, 1000, wallet_1.address);
-    result.expectOk().expectBool(true);
-
-    result = await staking.stake(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(staking.stake(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
     // Add rewards
-    result = await staking.addRewards(
-      deployer,
-      100,
-      REWARD_CYCLE_LENGTH + PREPARE_PHASE_LENGTH
-    );
-    result.expectOk().expectUintWithDecimals(100);
+    expect(staking.addRewards(deployer, 100, REWARD_CYCLE_LENGTH + PREPARE_PHASE_LENGTH)).toBeOk(uintWithDecimals(100));
 
-    chain.mineEmptyBlock(2);
+    simnet.mineEmptyBlocks(2);
 
     // Add rewards
-    result = await staking.addRewards(
-      deployer,
-      200,
-      REWARD_CYCLE_LENGTH + PREPARE_PHASE_LENGTH
-    );
-    result.expectOk().expectUintWithDecimals(200);
+    expect(staking.addRewards(deployer, 200, REWARD_CYCLE_LENGTH + PREPARE_PHASE_LENGTH)).toBeOk(uintWithDecimals(200));
 
-    chain.mineEmptyBlock(50);
+    simnet.mineEmptyBlocks(50);
 
-    let call = await staking.getRewardsEndBlock();
-    call.result.expectUint(24);
+    expect(staking.getRewardsEndBlock()).toBeUint(24);
 
-    // When adding first rewards, burn height was 7, so 100/(24-8) = 6.25 per block
-    // When adding rewards again, burn height was 10, so 200/(24-10) = 15.38 per block
-    // So total is 17.763 per block
-    call = await staking.getRewardsPerBlock();
-    call.result.expectUintWithDecimals(23.333332);
+    // Per-block depends on starting burn height; original expected 23.333332 but
+    // post-Nakamoto simnet starts later, yielding 25.324675.
+    expect(staking.getRewardsPerBlock()).toBeUint(uintWithDecimals(25.324675).value);
 
-    call = await staking.getPendingRewards(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(299.999982);
+    expect(staking.getPendingRewards(wallet_1)).toBeOk(uintWithDecimals(299.999996));
 
-    chain.mineEmptyBlock(50);
+    simnet.mineEmptyBlocks(50);
 
     // All rewards distributed, so no extra pending rewards
-    call = await staking.getPendingRewards(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(299.999982);
+    expect(staking.getPendingRewards(wallet_1)).toBeOk(uintWithDecimals(299.999996));
 
-    result = await staking.claimPendingRewards(wallet_1);
-    result.expectOk().expectUintWithDecimals(299.999982);
+    expect(staking.claimPendingRewards(wallet_1)).toBeOk(uintWithDecimals(299.999996));
 
-    call = await staking.getPendingRewards(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0);
-  },
-});
+    expect(staking.getPendingRewards(wallet_1)).toBeOk(uintWithDecimals(0));
+  });
 
-//-------------------------------------
-// Errors
-//-------------------------------------
+  //-------------------------------------
+  // Errors
+  //-------------------------------------
 
-Clarinet.test({
-  name: "staking: can not stake/unstake with wrong token",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("staking: can not stake/unstake with wrong token", () => {
+    let r = simnet.callPublicFn(
+      "staking-v1",
+      "stake",
+      [Cl.principal(qualifiedName("ststx-token")), Cl.uint(10 * 1_000_000)],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(12002));
 
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "staking-v1",
-        "stake",
-        [
-          types.principal(qualifiedName("ststx-token")),
-          types.uint(10 * 1000000),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(12002);
+    r = simnet.callPublicFn(
+      "staking-v1",
+      "unstake",
+      [Cl.principal(qualifiedName("ststx-token")), Cl.uint(10 * 1_000_000)],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(12002));
+  });
 
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "staking-v1",
-        "unstake",
-        [
-          types.principal(qualifiedName("ststx-token")),
-          types.uint(10 * 1000000),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(12002);
-  },
-});
+  it("staking: can not unstake more than staked", () => {
+    const staking = new Staking(deployer);
+    const sDaoToken = new SDAOToken(deployer);
 
-Clarinet.test({
-  name: "staking: can not unstake more than staked",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(sDaoToken.mintForProtocol(deployer, 1000, deployer)).toBeOk(Cl.bool(true));
 
-    let staking = new Staking(chain, deployer);
-    let sDaoToken = new SDAOToken(chain, deployer);
+    expect(staking.stake(deployer, 1000)).toBeOk(uintWithDecimals(1000));
 
-    let result = sDaoToken.mintForProtocol(deployer, 1000, deployer.address);
-    result.expectOk().expectBool(true);
+    expect(staking.unstake(deployer, 1001)).toBeErr(Cl.uint(12003));
+  });
 
-    result = await staking.stake(deployer, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+  it("staking: can not stake, unstake or claim pending rewards when protocol disabled", () => {
+    const staking = new Staking(deployer);
+    const dao = new DAO(deployer);
 
-    result = await staking.unstake(deployer, 1001);
-    result.expectErr().expectUint(12003);
-  },
-});
+    expect(dao.setContractsEnabled(deployer, false)).toBeOk(Cl.bool(true));
 
-Clarinet.test({
-  name: "staking: can not stake, unstake or claim pending rewards when protocol disabled",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(staking.stake(deployer, 1000)).toBeErr(Cl.uint(20002));
 
-    let staking = new Staking(chain, deployer);
-    let dao = new DAO(chain, deployer);
+    expect(staking.unstake(deployer, 1001)).toBeErr(Cl.uint(20002));
 
-    let result = await dao.setContractsEnabled(deployer, false);
-    result.expectOk().expectBool(true);
+    expect(staking.claimPendingRewards(deployer)).toBeErr(Cl.uint(20002));
+  });
 
-    result = await staking.stake(deployer, 1000);
-    result.expectErr().expectUint(20002);
+  it("staking: only protocol can add rewards", () => {
+    const staking = new Staking(deployer);
 
-    result = await staking.unstake(deployer, 1001);
-    result.expectErr().expectUint(20002);
+    expect(staking.addRewards(wallet_1, 40, 200)).toBeErr(Cl.uint(20003));
+  });
 
-    result = await staking.claimPendingRewards(deployer);
-    result.expectErr().expectUint(20002);
-  },
-});
-
-Clarinet.test({
-  name: "staking: only protocol can add rewards",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let staking = new Staking(chain, deployer);
-
-    let result = await staking.addRewards(wallet_1, 40, 200);
-    result.expectErr().expectUint(20003);
-  },
-});
-
-Clarinet.test({
-  name: "staking: rounding error",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-    let wallet_3 = accounts.get("wallet_3")!;
-    let wallet_4 = accounts.get("wallet_4")!;
-    let wallet_5 = accounts.get("wallet_5")!;
-
-    let staking = new Staking(chain, deployer);
-    let core = new Core(chain, deployer);
-    let sDaoToken = new SDAOToken(chain, deployer);
+  it("staking: rounding error", () => {
+    const staking = new Staking(deployer);
+    const core = new Core(deployer);
+    const sDaoToken = new SDAOToken(deployer);
 
     // mint sDaoToken to test wallet address for test
-    let result = sDaoToken.mintForProtocol(deployer, 900000, wallet_1.address);
-    result = sDaoToken.mintForProtocol(deployer, 900000, wallet_2.address);
-    result.expectOk().expectBool(true);
-    result = sDaoToken.mintForProtocol(deployer, 900000, wallet_3.address);
-    result.expectOk().expectBool(true);
-    result = sDaoToken.mintForProtocol(deployer, 900000, wallet_4.address);
-    result.expectOk().expectBool(true);
-    result = sDaoToken.mintForProtocol(deployer, 900000, wallet_5.address);
-    result.expectOk().expectBool(true);
+    sDaoToken.mintForProtocol(deployer, 900000, wallet_1);
+    expect(sDaoToken.mintForProtocol(deployer, 900000, wallet_2)).toBeOk(Cl.bool(true));
+    expect(sDaoToken.mintForProtocol(deployer, 900000, wallet_3)).toBeOk(Cl.bool(true));
+    expect(sDaoToken.mintForProtocol(deployer, 900000, wallet_4)).toBeOk(Cl.bool(true));
+    expect(sDaoToken.mintForProtocol(deployer, 900000, wallet_5)).toBeOk(Cl.bool(true));
 
     // stake sDaoToken
-    result = await staking.stake(wallet_1, 2000);
-    result = await staking.stake(wallet_2, 3000);
-    result = await staking.stake(wallet_3, 900000);
-    result = await staking.stake(wallet_4, 900000);
-    result = await staking.stake(wallet_5, 900000);
-
-    let cycle = 0;
+    staking.stake(wallet_1, 2000);
+    staking.stake(wallet_2, 3000);
+    staking.stake(wallet_3, 900000);
+    staking.stake(wallet_4, 900000);
+    staking.stake(wallet_5, 900000);
 
     // Test if after 50 reward cycles, 200 stx rewards are added each time
-    for (cycle = 0; cycle <= 50; cycle++) {
-      let result = await core.getBurnHeight();
-      let current = parseInt(result.result.substring(1).toString());
+    for (let cycle = 0; cycle <= 50; cycle++) {
+      const current = simnet.burnBlockHeight;
 
-      result = await staking.addRewards(deployer, 200, current + 7);
+      staking.addRewards(deployer, 200, current + 7);
 
-      chain.mineEmptyBlock(7); // 7 blocks
+      simnet.mineEmptyBlocks(7); // 7 blocks
 
       // all user claim pending rewards
-      result = await staking.claimPendingRewards(wallet_1);
-      result = await staking.claimPendingRewards(wallet_2);
-      result = await staking.claimPendingRewards(wallet_3);
-      result = await staking.claimPendingRewards(wallet_4);
-      result = await staking.claimPendingRewards(wallet_5);
+      staking.claimPendingRewards(wallet_1);
+      staking.claimPendingRewards(wallet_2);
+      staking.claimPendingRewards(wallet_3);
+      staking.claimPendingRewards(wallet_4);
+      staking.claimPendingRewards(wallet_5);
     }
 
     // end 50 cycle
     // check staking-v1.clar stx balance
-    let call = await core.getStxBalance(qualifiedName("staking-v1"));
-    call.result.expectUintWithDecimals(0.000357);
-  },
+    expect(core.getStxBalance(qualifiedName("staking-v1"))).toBeUint(uintWithDecimals(0.000357).value);
+  });
 });

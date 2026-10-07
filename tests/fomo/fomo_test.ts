@@ -1,245 +1,167 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
+import { describe, expect, it } from "vitest";
+import { Cl, ClarityType } from "@stacks/transactions";
 
-import { Core, CoreV1 } from '../wrappers/stacking-dao-core-helpers.ts';
-import { Commission } from '../wrappers/commission-helpers.ts';
-import { Fomo } from '../wrappers/fomo-helpers.ts';
-import { StStxToken } from '../wrappers/ststx-token-helpers.ts';
-import { qualifiedName } from "../wrappers/tests-utils.ts";
+import { qualifiedName, uintWithDecimals } from "../wrappers/tests-utils";
+import { Core, CoreV1 } from "../wrappers/stacking-dao-core-helpers";
+import { Fomo } from "../wrappers/fomo-helpers";
+import { StStxToken } from "../wrappers/ststx-token-helpers";
 
-//-------------------------------------
-// Core 
-//-------------------------------------
-
-Clarinet.test({
-  name: "fomo: can buy the claim",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let corev1 = new CoreV1(chain, deployer);
-    let core = new Core(chain, deployer);
-    let fomo = new Fomo(chain, deployer);
-    let stStxToken = new StStxToken(chain, deployer);
-
-    let call = await corev1.getStxBalance(wallet_1.address);
-    call.result.expectUintWithDecimals(100000000);
-
-    let result = await core.deposit(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.deposit(deployer, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await fomo.startGame(wallet_1);
-    result.expectErr().expectUint(20003);
-
-    result = await fomo.startGame(deployer);
-    result.expectOk().expectBool(true);
-
-    result = await stStxToken.transfer(deployer, 100, qualifiedName("fomo"));
-    result.expectOk();
-    call = await stStxToken.getBalance(qualifiedName("fomo"));
-    call.result.expectOk().expectUintWithDecimals(100);
-
-    call = await stStxToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(1000);
-
-    result = await fomo.buyClaim(wallet_1);
-    result.expectOk().expectBool(true);
-
-    call = await stStxToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(998.9);
-
-    call = await fomo.getCurrentWinner();
-    call.result.expectPrincipal(wallet_1.address);
-
-    result = await fomo.buyClaim(deployer);
-    result.expectOk().expectBool(true);
-
-    call = await fomo.getCurrentWinner();
-    call.result.expectPrincipal(deployer.address);
-  }
-});
-
-Clarinet.test({
-  name: "fomo: can play a whole game",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-    let wallet_3 = accounts.get("wallet_3")!;
-
-    let corev1 = new CoreV1(chain, deployer);
-    let core = new Core(chain, deployer);
-    let fomo = new Fomo(chain, deployer);
-    let stStxToken = new StStxToken(chain, deployer);
-
-    let call = await corev1.getStxBalance(wallet_1.address);
-    call.result.expectUintWithDecimals(100000000);
-
-    let result = await core.deposit(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await fomo.startGame(deployer);
-    result.expectOk().expectBool(true);
-
-    result = await core.deposit(deployer, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.deposit(wallet_2, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await core.deposit(wallet_3, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
-
-    result = await stStxToken.transfer(deployer, 100, qualifiedName("fomo"));
-    result.expectOk();
-    call = await stStxToken.getBalance(qualifiedName("fomo"));
-    call.result.expectOk().expectUintWithDecimals(100);
-
-    call = await stStxToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(1000);
-
-    result = await fomo.buyClaim(wallet_1);
-    result.expectOk().expectBool(true);
-
-    call = await stStxToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(998.9);
-
-    call = await fomo.getCurrentWinner();
-    call.result.expectPrincipal(wallet_1.address);
-
-    result = await fomo.buyClaim(deployer);
-    result.expectOk().expectBool(true);
-
-    call = await fomo.getCurrentWinner();
-    call.result.expectPrincipal(deployer.address);
-
-    result = await fomo.buyClaim(wallet_2);
-    result.expectOk().expectBool(true);
-
-    result = await fomo.buyClaim(wallet_3);
-    result.expectOk().expectBool(true);
-
-    chain.mineEmptyBlock(100);
-
-    call = await fomo.hasGameEnded();
-    call.result.expectBool(false);
-
-    chain.mineEmptyBlock(144);
-
-    call = await fomo.hasGameEnded();
-    call.result.expectBool(true);
-
-    call = await fomo.getCurrentWinner();
-    call.result.expectPrincipal(wallet_3.address);
-
-    result = await fomo.retrieveWinner(wallet_2, 2);
-    result.expectErr().expectUint(6660004);
-
-    call = await stStxToken.getBalance(wallet_3.address);
-    call.result.expectOk().expectUintWithDecimals(998.6); // before claiming prize
-
-    call = await stStxToken.getBalance(qualifiedName("fomo"));
-    call.result.expectOk().expectUintWithDecimals(105);
-
-    result = await fomo.retrieveWinner(wallet_3, 3);
-    result.expectOk().expectUint(73500000);
-
-    result = await fomo.retrieveWinner(wallet_3, 3);
-    result.expectErr().expectUint(6660006);
-
-    call = await stStxToken.getBalance(wallet_3.address);
-    call.result.expectOk().expectUintWithDecimals(998.6 + 73.5);
-
-    result = await fomo.retrieveLoser(wallet_2, 2);
-    result.expectOk().expectUintWithDecimals(8.75);
-
-    result = await fomo.retrieveLoser(wallet_1, 0);
-    result.expectOk().expectUintWithDecimals(8.75);
-
-    result = await fomo.retrieveLoser(deployer, 1);
-    result.expectOk().expectUintWithDecimals(8.75);
-
-    result = await fomo.retrieveFees(deployer);
-    result.expectOk().expectUintWithDecimals(5.25);
-  }
-});
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
+const wallet_3 = accounts.get("wallet_3")!;
 
 //-------------------------------------
-// Errors 
+// Core
 //-------------------------------------
 
-Clarinet.test({
-  name: "fomo: cannot buy the claim if game ended",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+describe("fomo", () => {
+  it("fomo: can buy the claim", () => {
+    const corev1 = new CoreV1(deployer);
+    const core = new Core(deployer);
+    const fomo = new Fomo(deployer);
+    const stStxToken = new StStxToken(deployer);
 
-    let core = new Core(chain, deployer);
-    let fomo = new Fomo(chain, deployer);
+    expect(corev1.getStxBalance(wallet_1)).toBeUint(uintWithDecimals(100000000).value);
 
-    let result = await core.deposit(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(core.deposit(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
-    result = await fomo.startGame(deployer);
-    result.expectOk().expectBool(true);
+    expect(core.deposit(deployer, 1000)).toBeOk(uintWithDecimals(1000));
 
-    let call = await fomo.getCurrentWinner();
-    call.result.expectPrincipal(deployer.address);
+    expect(fomo.startGame(wallet_1)).toBeErr(Cl.uint(20003));
 
-    chain.mineEmptyBlock(144);
+    expect(fomo.startGame(deployer)).toBeOk(Cl.bool(true));
 
-    result = await fomo.buyClaim(wallet_1);
-    result.expectErr().expectUint(6660001);
-  }
-});
+    expect(stStxToken.transfer(deployer, 100, qualifiedName("fomo"))).toHaveClarityType(ClarityType.ResponseOk);
+    expect(stStxToken.getBalance(qualifiedName("fomo"))).toBeOk(uintWithDecimals(100));
 
-//-------------------------------------
-// Access 
-//-------------------------------------
+    expect(stStxToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(1000));
 
-Clarinet.test({
-  name: "fomo: can/cannot change increment",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    expect(fomo.buyClaim(wallet_1)).toBeOk(Cl.bool(true));
 
-    let fomo = new Fomo(chain, deployer);
+    expect(stStxToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(998.9));
 
-    let result = await fomo.setIncrement(wallet_1, 1000);
-    result.expectErr().expectUint(20003);
+    expect(fomo.getCurrentWinner()).toBePrincipal(wallet_1);
 
-    result = await fomo.setIncrement(deployer, 1000);
-    result.expectOk().expectBool(true);
+    expect(fomo.buyClaim(deployer)).toBeOk(Cl.bool(true));
 
-    let call = await fomo.getIncrement();
-    call.result.expectUintWithDecimals(1000);
-  }
-});
+    expect(fomo.getCurrentWinner()).toBePrincipal(deployer);
+  });
 
-Clarinet.test({
-  name: "fomo: can rescue funds",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("fomo: can play a whole game", () => {
+    const corev1 = new CoreV1(deployer);
+    const core = new Core(deployer);
+    const fomo = new Fomo(deployer);
+    const stStxToken = new StStxToken(deployer);
 
-    let core = new Core(chain, deployer);
-    let fomo = new Fomo(chain, deployer);
+    expect(corev1.getStxBalance(wallet_1)).toBeUint(uintWithDecimals(100000000).value);
 
-    let result = await core.deposit(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(core.deposit(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
-    result = await fomo.startGame(deployer);
-    result.expectOk().expectBool(true);
+    expect(fomo.startGame(deployer)).toBeOk(Cl.bool(true));
 
-    result = await fomo.buyClaim(wallet_1);
-    result.expectOk().expectBool(true);
+    expect(core.deposit(deployer, 1000)).toBeOk(uintWithDecimals(1000));
 
-    result = await fomo.rescueFunds(wallet_1);
-    result.expectErr().expectUint(20003);
+    expect(core.deposit(wallet_2, 1000)).toBeOk(uintWithDecimals(1000));
 
-    result = await fomo.rescueFunds(deployer);
-    result.expectOk().expectUintWithDecimals(1.1);
-  }
+    expect(core.deposit(wallet_3, 1000)).toBeOk(uintWithDecimals(1000));
+
+    expect(stStxToken.transfer(deployer, 100, qualifiedName("fomo"))).toHaveClarityType(ClarityType.ResponseOk);
+    expect(stStxToken.getBalance(qualifiedName("fomo"))).toBeOk(uintWithDecimals(100));
+
+    expect(stStxToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(1000));
+
+    expect(fomo.buyClaim(wallet_1)).toBeOk(Cl.bool(true));
+
+    expect(stStxToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(998.9));
+
+    expect(fomo.getCurrentWinner()).toBePrincipal(wallet_1);
+
+    expect(fomo.buyClaim(deployer)).toBeOk(Cl.bool(true));
+
+    expect(fomo.getCurrentWinner()).toBePrincipal(deployer);
+
+    expect(fomo.buyClaim(wallet_2)).toBeOk(Cl.bool(true));
+
+    expect(fomo.buyClaim(wallet_3)).toBeOk(Cl.bool(true));
+
+    simnet.mineEmptyBlocks(100);
+
+    expect(fomo.hasGameEnded()).toBeBool(false);
+
+    simnet.mineEmptyBlocks(144);
+
+    expect(fomo.hasGameEnded()).toBeBool(true);
+
+    expect(fomo.getCurrentWinner()).toBePrincipal(wallet_3);
+
+    expect(fomo.retrieveWinner(wallet_2, 2)).toBeErr(Cl.uint(6660004));
+
+    expect(stStxToken.getBalance(wallet_3)).toBeOk(uintWithDecimals(998.6)); // before claiming prize
+
+    expect(stStxToken.getBalance(qualifiedName("fomo"))).toBeOk(uintWithDecimals(105));
+
+    expect(fomo.retrieveWinner(wallet_3, 3)).toBeOk(Cl.uint(73500000));
+
+    expect(fomo.retrieveWinner(wallet_3, 3)).toBeErr(Cl.uint(6660006));
+
+    expect(stStxToken.getBalance(wallet_3)).toBeOk(uintWithDecimals(998.6 + 73.5));
+
+    expect(fomo.retrieveLoser(wallet_2, 2)).toBeOk(uintWithDecimals(8.75));
+
+    expect(fomo.retrieveLoser(wallet_1, 0)).toBeOk(uintWithDecimals(8.75));
+
+    expect(fomo.retrieveLoser(deployer, 1)).toBeOk(uintWithDecimals(8.75));
+
+    expect(fomo.retrieveFees(deployer)).toBeOk(uintWithDecimals(5.25));
+  });
+
+  //-------------------------------------
+  // Errors
+  //-------------------------------------
+
+  it("fomo: cannot buy the claim if game ended", () => {
+    const core = new Core(deployer);
+    const fomo = new Fomo(deployer);
+
+    expect(core.deposit(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
+
+    expect(fomo.startGame(deployer)).toBeOk(Cl.bool(true));
+
+    expect(fomo.getCurrentWinner()).toBePrincipal(deployer);
+
+    simnet.mineEmptyBlocks(144);
+
+    expect(fomo.buyClaim(wallet_1)).toBeErr(Cl.uint(6660001));
+  });
+
+  //-------------------------------------
+  // Access
+  //-------------------------------------
+
+  it("fomo: can/cannot change increment", () => {
+    const fomo = new Fomo(deployer);
+
+    expect(fomo.setIncrement(wallet_1, 1000)).toBeErr(Cl.uint(20003));
+
+    expect(fomo.setIncrement(deployer, 1000)).toBeOk(Cl.bool(true));
+
+    expect(fomo.getIncrement()).toBeUint(uintWithDecimals(1000).value);
+  });
+
+  it("fomo: can rescue funds", () => {
+    const core = new Core(deployer);
+    const fomo = new Fomo(deployer);
+
+    expect(core.deposit(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
+
+    expect(fomo.startGame(deployer)).toBeOk(Cl.bool(true));
+
+    expect(fomo.buyClaim(wallet_1)).toBeOk(Cl.bool(true));
+
+    expect(fomo.rescueFunds(wallet_1)).toBeErr(Cl.uint(20003));
+
+    expect(fomo.rescueFunds(deployer)).toBeOk(uintWithDecimals(1.1));
+  });
 });

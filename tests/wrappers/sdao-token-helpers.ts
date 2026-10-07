@@ -1,94 +1,92 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // sDAO token
 // ---------------------------------------------------------
 
-class SDAOToken {
-  chain: Chain;
-  deployer: Account;
+export class SDAOToken {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getTotalSupply() {
-    return this.chain.callReadOnlyFn("sdao-token", "get-total-supply", [], this.deployer.address);
+  getTotalSupply(): ClarityValue {
+    return simnet.callReadOnlyFn("sdao-token", "get-total-supply", [], this.deployer).result;
   }
 
-  getName() {
-    return this.chain.callReadOnlyFn("sdao-token", "get-name", [], this.deployer.address);
+  getName(): ClarityValue {
+    return simnet.callReadOnlyFn("sdao-token", "get-name", [], this.deployer).result;
   }
 
-  getSymbol() {
-    return this.chain.callReadOnlyFn("sdao-token", "get-symbol", [], this.deployer.address);
+  getSymbol(): ClarityValue {
+    return simnet.callReadOnlyFn("sdao-token", "get-symbol", [], this.deployer).result;
   }
 
-  getDecimals() {
-    return this.chain.callReadOnlyFn("sdao-token", "get-decimals", [], this.deployer.address);
+  getDecimals(): ClarityValue {
+    return simnet.callReadOnlyFn("sdao-token", "get-decimals", [], this.deployer).result;
   }
 
-  getBalance(account: string) {
-    return this.chain.callReadOnlyFn("sdao-token", "get-balance", [
-      types.principal(account)
-    ], this.deployer.address);
+  getBalance(account: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "sdao-token",
+      "get-balance",
+      [Cl.principal(account)],
+      this.deployer,
+    ).result;
   }
 
-  getTokenUri() {
-    return this.chain.callReadOnlyFn("sdao-token", "get-token-uri", [], this.deployer.address);
+  getTokenUri(): ClarityValue {
+    return simnet.callReadOnlyFn("sdao-token", "get-token-uri", [], this.deployer).result;
   }
 
-  transfer(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("sdao-token", "transfer", [
-        types.uint(amount * 1000000),
-        types.principal(caller.address),
-        types.principal(receiver),
-        types.none()
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  transfer(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "sdao-token",
+      "transfer",
+      [
+        Cl.uint(amount * 1_000_000),
+        Cl.principal(caller),
+        Cl.principal(receiver),
+        Cl.none(),
+      ],
+      caller,
+    ).result;
   }
 
-  setTokenUri(caller: Account, uri: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("sdao-token", "set-token-uri", [
-        types.utf8(uri),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setTokenUri(caller: string, uri: string): ClarityValue {
+    return simnet.callPublicFn(
+      "sdao-token",
+      "set-token-uri",
+      [Cl.stringUtf8(uri)],
+      caller,
+    ).result;
   }
 
-  mintForProtocol(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("sdao-token", "mint-for-protocol", [
-        types.uint(amount * 1000000),
-        types.principal(receiver),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  mintForProtocol(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "sdao-token",
+      "mint-for-protocol",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  burnForProtocol(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("sdao-token", "burn-for-protocol", [
-        types.uint(amount * 1000000),
-        types.principal(receiver),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  burnForProtocol(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "sdao-token",
+      "burn-for-protocol",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  burn(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("sdao-token", "burn", [
-        types.uint(amount * 1000000),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  burn(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "sdao-token",
+      "burn",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
-
 }
-export { SDAOToken };

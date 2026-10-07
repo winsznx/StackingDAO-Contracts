@@ -1,425 +1,339 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName, REWARD_CYCLE_LENGTH } from "../wrappers/tests-utils.ts";
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { DAO } from '../wrappers/dao-helpers.ts';
-import { Reserve } from '../wrappers/reserve-helpers.ts';
-import { CoreV1 as Core } from '../wrappers/stacking-dao-core-helpers.ts';
-import { Stacker } from '../wrappers/stacker-helpers.ts';
-import { Pox3Mock } from '../wrappers/pox-mock-helpers.ts';
+import {
+  hexToBytes,
+  qualifiedName,
+  REWARD_CYCLE_LENGTH,
+  someValue,
+  tupleField,
+  uintWithDecimals,
+} from "../wrappers/tests-utils";
+import { DAO } from "../wrappers/dao-helpers";
+import { Reserve } from "../wrappers/reserve-helpers";
+import { CoreV1 as Core } from "../wrappers/stacking-dao-core-helpers";
+import { Stacker } from "../wrappers/stacker-helpers";
+import { Pox3Mock } from "../wrappers/pox-mock-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+
+const FAKE_POX_ADDR = Cl.tuple({
+  version: Cl.buffer(new Uint8Array([0x00])),
+  hashbytes: Cl.buffer(hexToBytes("f632e6f9d29bfb07bc8948ca6e0dd09358f003ac")),
+});
 
 //-------------------------------------
-// Core 
+// Core
 //-------------------------------------
 
-Clarinet.test({
-  name: "stacker: can initiate stacking, increase and extend",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let core = new Core(chain, deployer);
-    let stacker = new Stacker(chain, deployer);
+describe("stacker", () => {
+  it("stacker: can initiate stacking, increase and extend", () => {
+    const core = new Core(deployer);
+    const stacker = new Stacker(deployer);
 
     // Check PoX info
-    let call = await stacker.getPoxInfo(1);
-    call.result.expectTuple()["reward-cycle-id"].expectUint(0);
-    call.result.expectTuple()["reward-cycle-length"].expectUint(REWARD_CYCLE_LENGTH);
-    call.result.expectTuple()["min-amount-ustx"].expectUintWithDecimals(50000);
+    let poxInfo = stacker.getPoxInfo(1);
+    expect(tupleField(poxInfo, "reward-cycle-id")).toBeUint(0);
+    expect(tupleField(poxInfo, "reward-cycle-length")).toBeUint(REWARD_CYCLE_LENGTH);
+    expect(tupleField(poxInfo, "min-amount-ustx")).toBeUint(uintWithDecimals(50000).value);
 
     // Deposit 150k STX to reserve
-    let result = await core.deposit(deployer, 150000);
-    result.expectOk().expectUintWithDecimals(150000);
+    expect(core.deposit(deployer, 150000)).toBeOk(uintWithDecimals(150000));
 
-    call = stacker.getStxBalance(1);
-    call.result.expectUintWithDecimals(0);
+    expect(stacker.getStxBalance(1)).toBeUint(uintWithDecimals(0).value);
 
     // No stacker info yet
-    call = await stacker.getStackerInfo(1);
-    call.result.expectNone();
+    expect(stacker.getStackerInfo(1)).toBeNone();
 
     // Nothing locked yet. Unlocked 0 as stacker does not have any tokens.
-    call = await stacker.getStxAccount(1);
-    call.result.expectTuple()["locked"].expectUintWithDecimals(0);
-    call.result.expectTuple()["unlock-height"].expectUint(0);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(0);
+    let stxAccount = stacker.getStxAccount(1);
+    expect(tupleField(stxAccount, "locked")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(stxAccount, "unlock-height")).toBeUint(0);
+    expect(tupleField(stxAccount, "unlocked")).toBeUint(uintWithDecimals(0).value);
 
     // In cycle 0
-    call = await stacker.getPoxInfo(1);
-    call.result.expectTuple()["reward-cycle-id"].expectUintWithDecimals(0);
+    poxInfo = stacker.getPoxInfo(1);
+    expect(tupleField(poxInfo, "reward-cycle-id")).toBeUint(uintWithDecimals(0).value);
 
     //
     // Start stacking
     //
-    result = await stacker.initiateStacking(1, deployer, 125000, 0, 1);
-    result.expectOk().expectUintWithDecimals(125000);
+    expect(stacker.initiateStacking(1, deployer, 125000, 0, 1)).toBeOk(uintWithDecimals(125000));
 
     // Check if burn height updated
-    call = await stacker.getStackingUnlockBurnHeight(1);
-    call.result.expectUint(2 * REWARD_CYCLE_LENGTH);
+    expect(stacker.getStackingUnlockBurnHeight(1)).toBeUint(2 * REWARD_CYCLE_LENGTH);
 
     // Check if STX stacked updated
-    call = await stacker.getStxStacked(1);
-    call.result.expectUintWithDecimals(125000);
+    expect(stacker.getStxStacked(1)).toBeUint(uintWithDecimals(125000).value);
 
-    call = await stacker.getStackingStxStacked(1);
-    call.result.expectUintWithDecimals(125000);
+    expect(stacker.getStackingStxStacked(1)).toBeUint(uintWithDecimals(125000).value);
 
     // Stacker info
-    call = await stacker.getStackerInfo(1);
-    call.result.expectSome().expectTuple()["first-reward-cycle"].expectUint(1);
-    call.result.expectSome().expectTuple()["lock-period"].expectUint(1);
+    let stackerInfo = someValue(stacker.getStackerInfo(1));
+    expect(tupleField(stackerInfo, "first-reward-cycle")).toBeUint(1);
+    expect(tupleField(stackerInfo, "lock-period")).toBeUint(1);
 
     // Tokens are now locked
-    call = await stacker.getStxAccount(1);
-    call.result.expectTuple()["locked"].expectUintWithDecimals(125000);
-    call.result.expectTuple()["unlock-height"].expectUint(2 * REWARD_CYCLE_LENGTH);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(0);
+    stxAccount = stacker.getStxAccount(1);
+    expect(tupleField(stxAccount, "locked")).toBeUint(uintWithDecimals(125000).value);
+    expect(tupleField(stxAccount, "unlock-height")).toBeUint(2 * REWARD_CYCLE_LENGTH);
+    expect(tupleField(stxAccount, "unlocked")).toBeUint(uintWithDecimals(0).value);
 
     //
     // Extend with 1 cycle
     //
-    result = await stacker.stackExtend(1, deployer, 1);
-    result.expectOk().expectUint(1);
+    expect(stacker.stackExtend(1, deployer, 1)).toBeOk(Cl.uint(1));
 
     // Check if burn height updated
-    call = await stacker.getStackingUnlockBurnHeight(1);
-    call.result.expectUint(3 * REWARD_CYCLE_LENGTH);
+    expect(stacker.getStackingUnlockBurnHeight(1)).toBeUint(3 * REWARD_CYCLE_LENGTH);
 
     // Check if STX stacked updated
-    call = await stacker.getStxStacked(1);
-    call.result.expectUintWithDecimals(125000);
+    expect(stacker.getStxStacked(1)).toBeUint(uintWithDecimals(125000).value);
 
     // Stacker info
-    call = await stacker.getStackerInfo(1);
-    call.result.expectSome().expectTuple()["first-reward-cycle"].expectUint(1);
-    call.result.expectSome().expectTuple()["lock-period"].expectUint(2);
+    stackerInfo = someValue(stacker.getStackerInfo(1));
+    expect(tupleField(stackerInfo, "first-reward-cycle")).toBeUint(1);
+    expect(tupleField(stackerInfo, "lock-period")).toBeUint(2);
 
     // Tokens are now locked for extra <REWARD_CYCLE_LENGTH> blocks
-    call = await stacker.getStxAccount(1);
-    call.result.expectTuple()["locked"].expectUintWithDecimals(125000);
-    call.result.expectTuple()["unlock-height"].expectUint(3 * REWARD_CYCLE_LENGTH);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(0);
+    stxAccount = stacker.getStxAccount(1);
+    expect(tupleField(stxAccount, "locked")).toBeUint(uintWithDecimals(125000).value);
+    expect(tupleField(stxAccount, "unlock-height")).toBeUint(3 * REWARD_CYCLE_LENGTH);
+    expect(tupleField(stxAccount, "unlocked")).toBeUint(uintWithDecimals(0).value);
 
     //
     // Increase with 5k STX
     //
-    result = await stacker.stackIncrease(1, deployer, 5000);
-    result.expectOk().expectUintWithDecimals(5000);
+    expect(stacker.stackIncrease(1, deployer, 5000)).toBeOk(uintWithDecimals(5000));
 
     // Check if burn height updated
-    call = await stacker.getStackingUnlockBurnHeight(1);
-    call.result.expectUint(3 * REWARD_CYCLE_LENGTH);
+    expect(stacker.getStackingUnlockBurnHeight(1)).toBeUint(3 * REWARD_CYCLE_LENGTH);
 
     // Check if STX stacked updated
-    call = await stacker.getStxStacked(1);
-    call.result.expectUintWithDecimals(130000);
+    expect(stacker.getStxStacked(1)).toBeUint(uintWithDecimals(130000).value);
 
     // Stacker info
-    call = await stacker.getStackerInfo(1);
-    call.result.expectSome().expectTuple()["first-reward-cycle"].expectUint(1);
-    call.result.expectSome().expectTuple()["lock-period"].expectUint(2);
+    stackerInfo = someValue(stacker.getStackerInfo(1));
+    expect(tupleField(stackerInfo, "first-reward-cycle")).toBeUint(1);
+    expect(tupleField(stackerInfo, "lock-period")).toBeUint(2);
 
     // Locked increased
-    call = await stacker.getStxAccount(1);
-    call.result.expectTuple()["locked"].expectUintWithDecimals(130000);
-    call.result.expectTuple()["unlock-height"].expectUint(3 * REWARD_CYCLE_LENGTH);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(0);
-  }
-});
+    stxAccount = stacker.getStxAccount(1);
+    expect(tupleField(stxAccount, "locked")).toBeUint(uintWithDecimals(130000).value);
+    expect(tupleField(stxAccount, "unlock-height")).toBeUint(3 * REWARD_CYCLE_LENGTH);
+    expect(tupleField(stxAccount, "unlocked")).toBeUint(uintWithDecimals(0).value);
+  });
 
-Clarinet.test({
-  name: "stacker: when stacking stopped, STX can be returned to reserve",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let reserve = new Reserve(chain, deployer);
-    let core = new Core(chain, deployer);
-    let stacker = new Stacker(chain, deployer);
-    let poxMock = new Pox3Mock(chain, deployer);
+  it("stacker: when stacking stopped, STX can be returned to reserve", () => {
+    const reserve = new Reserve(deployer);
+    const core = new Core(deployer);
+    const stacker = new Stacker(deployer);
+    const poxMock = new Pox3Mock(deployer);
 
     // Deposit 150k STX to reserve
-    let result = await core.deposit(deployer, 150000);
-    result.expectOk().expectUintWithDecimals(150000);
+    expect(core.deposit(deployer, 150000)).toBeOk(uintWithDecimals(150000));
 
     //
     // Start stacking
     //
-    result = await stacker.initiateStacking(1, deployer, 125000, 0, 1);
-    result.expectOk().expectUintWithDecimals(125000);
+    expect(stacker.initiateStacking(1, deployer, 125000, 0, 1)).toBeOk(uintWithDecimals(125000));
 
     // Tokens are now locked
-    let call = await stacker.getStxAccount(1);
-    call.result.expectTuple()["locked"].expectUintWithDecimals(125000);
-    call.result.expectTuple()["unlock-height"].expectUint(2 * REWARD_CYCLE_LENGTH);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(0);
+    let stxAccount = stacker.getStxAccount(1);
+    expect(tupleField(stxAccount, "locked")).toBeUint(uintWithDecimals(125000).value);
+    expect(tupleField(stxAccount, "unlock-height")).toBeUint(2 * REWARD_CYCLE_LENGTH);
+    expect(tupleField(stxAccount, "unlocked")).toBeUint(uintWithDecimals(0).value);
 
     //
     // Stop stacking
     //
 
     // Advance to unlock height
-    chain.mineEmptyBlock(2 * REWARD_CYCLE_LENGTH);
+    simnet.mineEmptyBlocks(2 * REWARD_CYCLE_LENGTH);
 
     // Unlock (125k STX will be unlocked)
-    result = await poxMock.unlock(deployer, qualifiedName("stacker-1"));
-    result.expectOk().expectUintWithDecimals(125000);
+    expect(poxMock.unlock(deployer, qualifiedName("stacker-1"))).toBeOk(uintWithDecimals(125000));
 
     // Check if burn height updated
-    call = await stacker.getStackingUnlockBurnHeight(1);
-    call.result.expectUint(2 * REWARD_CYCLE_LENGTH);
+    expect(stacker.getStackingUnlockBurnHeight(1)).toBeUint(2 * REWARD_CYCLE_LENGTH);
 
     // Check if STX stacked updated
-    call = await stacker.getStxStacked(1);
-    call.result.expectUintWithDecimals(0);
+    expect(stacker.getStxStacked(1)).toBeUint(uintWithDecimals(0).value);
 
     // This var is not reset, which is intended
-    call = await stacker.getStackingStxStacked(1);
-    call.result.expectUintWithDecimals(125000);
+    expect(stacker.getStackingStxStacked(1)).toBeUint(uintWithDecimals(125000).value);
 
     // Stacker info
-    call = await stacker.getStackerInfo(1);
-    call.result.expectNone()
+    expect(stacker.getStackerInfo(1)).toBeNone();
 
     // Account updated
-    call = await stacker.getStxAccount(1);
-    call.result.expectTuple()["locked"].expectUintWithDecimals(0);
-    call.result.expectTuple()["unlock-height"].expectUint(0);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(125000);
+    stxAccount = stacker.getStxAccount(1);
+    expect(tupleField(stxAccount, "locked")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(stxAccount, "unlock-height")).toBeUint(0);
+    expect(tupleField(stxAccount, "unlocked")).toBeUint(uintWithDecimals(125000).value);
 
     //
     // STX tokens to reserve
     //
 
-    call = await stacker.getStxBalance(1);
-    call.result.expectUintWithDecimals(125000);
+    expect(stacker.getStxBalance(1)).toBeUint(uintWithDecimals(125000).value);
 
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(150000);
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(150000));
 
-    call = await reserve.getStxBalance();
-    call.result.expectOk().expectUintWithDecimals(25000);
+    expect(reserve.getStxBalance()).toBeOk(uintWithDecimals(25000));
 
-    call = await reserve.getStxStacking();
-    call.result.expectOk().expectUintWithDecimals(125000);
+    expect(reserve.getStxStacking()).toBeOk(uintWithDecimals(125000));
 
-    result = await stacker.returnStx(1, deployer);
-    result.expectOk().expectUintWithDecimals(125000);
+    expect(stacker.returnStx(1, deployer)).toBeOk(uintWithDecimals(125000));
 
-    call = await stacker.getStxBalance(1);
-    call.result.expectUintWithDecimals(0);
+    expect(stacker.getStxBalance(1)).toBeUint(uintWithDecimals(0).value);
 
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(150000);
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(150000));
 
-    call = await reserve.getStxBalance();
-    call.result.expectOk().expectUintWithDecimals(150000);
+    expect(reserve.getStxBalance()).toBeOk(uintWithDecimals(150000));
 
-    call = await reserve.getStxStacking();
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(reserve.getStxStacking()).toBeOk(uintWithDecimals(0));
 
     // Account updated
-    call = await stacker.getStxAccount(1);
-    call.result.expectTuple()["locked"].expectUintWithDecimals(0);
-    call.result.expectTuple()["unlock-height"].expectUint(0);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(0);
-  }
-});
+    stxAccount = stacker.getStxAccount(1);
+    expect(tupleField(stxAccount, "locked")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(stxAccount, "unlock-height")).toBeUint(0);
+    expect(tupleField(stxAccount, "unlocked")).toBeUint(uintWithDecimals(0).value);
+  });
 
-Clarinet.test({
-  name: "stacker: can call return STX even when no balance",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("stacker: can call return STX even when no balance", () => {
+    const stacker = new Stacker(deployer);
 
-    let stacker = new Stacker(chain, deployer);
+    expect(stacker.returnStx(1, deployer)).toBeOk(uintWithDecimals(0));
+  });
 
-    let result = await stacker.returnStx(1, deployer);
-    result.expectOk().expectUintWithDecimals(0)
-  }
-});
+  //-------------------------------------
+  // Errors
+  //-------------------------------------
 
-//-------------------------------------
-// Errors 
-//-------------------------------------
-
-Clarinet.test({
-  name: "stacker: stacker can stack errors",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let core = new Core(chain, deployer);
-
-    let stacker = new Stacker(chain, deployer);
+  it("stacker: stacker can stack errors", () => {
+    const core = new Core(deployer);
+    const stacker = new Stacker(deployer);
 
     // Deposit 150k STX to reserve
-    let result = await core.deposit(deployer, 150000);
-    result.expectOk().expectUintWithDecimals(150000);
+    expect(core.deposit(deployer, 150000)).toBeOk(uintWithDecimals(150000));
 
     // ERR_INVALID_START_BURN_HEIGHT = 24
-    result = await stacker.initiateStacking(1, deployer, 125000, 100000, 1);
-    result.expectErr().expectUint(24);
-  }
-});
+    expect(stacker.initiateStacking(1, deployer, 125000, 100000, 1)).toBeErr(Cl.uint(24));
+  });
 
-Clarinet.test({
-  name: "stacker: initiate stacking errors",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let core = new Core(chain, deployer);
-
-    let stacker = new Stacker(chain, deployer);
+  it("stacker: initiate stacking errors", () => {
+    const core = new Core(deployer);
+    const stacker = new Stacker(deployer);
 
     // Not enough balance
-    let result = await stacker.initiateStacking(1, deployer, 125000, 0, 1);
-    result.expectErr().expectUint(1);
+    expect(stacker.initiateStacking(1, deployer, 125000, 0, 1)).toBeErr(Cl.uint(1));
 
-    result = await core.deposit(deployer, 150000);
-    result.expectOk().expectUintWithDecimals(150000);
+    expect(core.deposit(deployer, 150000)).toBeOk(uintWithDecimals(150000));
 
     // Invalid start burn height
-    result = await stacker.initiateStacking(1, deployer, 125000, 100000, 1);
-    result.expectErr().expectUint(24);
-  }
-});
+    expect(stacker.initiateStacking(1, deployer, 125000, 100000, 1)).toBeErr(Cl.uint(24));
+  });
 
-Clarinet.test({
-  name: "stacker: stacking extend errors",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let stacker = new Stacker(chain, deployer);
+  it("stacker: stacking extend errors", () => {
+    const stacker = new Stacker(deployer);
 
     // Noting locked
-    let result = await stacker.stackExtend(1, deployer, 1);
-    result.expectErr().expectUint(26);
-  }
-});
+    expect(stacker.stackExtend(1, deployer, 1)).toBeErr(Cl.uint(26));
+  });
 
-Clarinet.test({
-  name: "stacker: stacking increase errors",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let core = new Core(chain, deployer);
-
-    let stacker = new Stacker(chain, deployer);
+  it("stacker: stacking increase errors", () => {
+    const core = new Core(deployer);
+    const stacker = new Stacker(deployer);
 
     // Insufficient funds
-    let result = await stacker.stackIncrease(1, deployer, 100);
-    result.expectErr().expectUint(1);
+    expect(stacker.stackIncrease(1, deployer, 100)).toBeErr(Cl.uint(1));
 
-    result = await core.deposit(deployer, 150000);
-    result.expectOk().expectUintWithDecimals(150000);
+    expect(core.deposit(deployer, 150000)).toBeOk(uintWithDecimals(150000));
 
     // Nothing locked
-    result = await stacker.stackIncrease(1, deployer, 100);
-    result.expectErr().expectUint(27);
-  }
-});
+    expect(stacker.stackIncrease(1, deployer, 100)).toBeErr(Cl.uint(27));
+  });
 
-//-------------------------------------
-// Access 
-//-------------------------------------
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-Clarinet.test({
-  name: "stacker: only protocol can initiate stacking, only if protocol enabled, with correct reserve",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("stacker: only protocol can initiate stacking, only if protocol enabled, with correct reserve", () => {
+    const dao = new DAO(deployer);
+    const stacker = new Stacker(deployer);
 
-    let dao = new DAO(chain, deployer);
-    let stacker = new Stacker(chain, deployer);
+    expect(stacker.initiateStacking(1, wallet_1, 125000, 0, 1)).toBeErr(Cl.uint(20003));
 
-    let result = await stacker.initiateStacking(1, wallet_1, 125000, 0, 1);
-    result.expectErr().expectUint(20003);
-
-    let block = chain.mineBlock([
-      Tx.contractCall("stacker-1", "initiate-stacking", [
-        types.principal(qualifiedName("fake-reserve")),
-        types.tuple({ 'version': '0x00', 'hashbytes': '0xf632e6f9d29bfb07bc8948ca6e0dd09358f003ac'}),
-        types.uint(100 * 1000000),
-        types.uint(0), 
-        types.uint(1) 
-      ], deployer.address)
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
+    const { result: fakeResult } = simnet.callPublicFn(
+      "stacker-1",
+      "initiate-stacking",
+      [
+        Cl.principal(qualifiedName("fake-reserve")),
+        FAKE_POX_ADDR,
+        Cl.uint(100 * 1_000_000),
+        Cl.uint(0),
+        Cl.uint(1),
+      ],
+      deployer,
+    );
+    expect(fakeResult).toBeErr(Cl.uint(20003));
 
     // Set protocol is inactive
-    result = await dao.setContractsEnabled(deployer, false);
-    result.expectOk().expectBool(true);
+    expect(dao.setContractsEnabled(deployer, false)).toBeOk(Cl.bool(true));
 
-    result = await stacker.initiateStacking(1, deployer, 125000, 0, 1);
-    result.expectErr().expectUint(20002);
-  }
-});
+    expect(stacker.initiateStacking(1, deployer, 125000, 0, 1)).toBeErr(Cl.uint(20002));
+  });
 
-Clarinet.test({
-  name: "stacker: only protocol can increase stacking, only if protocol enabled, with correct reserve",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("stacker: only protocol can increase stacking, only if protocol enabled, with correct reserve", () => {
+    const dao = new DAO(deployer);
+    const stacker = new Stacker(deployer);
 
-    let dao = new DAO(chain, deployer);
-    let stacker = new Stacker(chain, deployer);
+    expect(stacker.stackIncrease(1, wallet_1, 125000)).toBeErr(Cl.uint(20003));
 
-    let result = await stacker.stackIncrease(1, wallet_1, 125000);
-    result.expectErr().expectUint(20003);
-
-    let block = chain.mineBlock([
-      Tx.contractCall("stacker-1", "stack-increase", [
-        types.principal(qualifiedName("fake-reserve")),
-        types.uint(100 * 1000000)
-      ], deployer.address)
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
+    const { result: fakeResult } = simnet.callPublicFn(
+      "stacker-1",
+      "stack-increase",
+      [Cl.principal(qualifiedName("fake-reserve")), Cl.uint(100 * 1_000_000)],
+      deployer,
+    );
+    expect(fakeResult).toBeErr(Cl.uint(20003));
 
     // Set protocol is inactive
-    result = await dao.setContractsEnabled(deployer, false);
-    result.expectOk().expectBool(true);
+    expect(dao.setContractsEnabled(deployer, false)).toBeOk(Cl.bool(true));
 
-    result = await stacker.stackIncrease(1, deployer, 125000);
-    result.expectErr().expectUint(20002);
-  }
-});
+    expect(stacker.stackIncrease(1, deployer, 125000)).toBeErr(Cl.uint(20002));
+  });
 
-Clarinet.test({
-  name: "stacker: only protocol can extend stacking, only if protocol enabled",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("stacker: only protocol can extend stacking, only if protocol enabled", () => {
+    const dao = new DAO(deployer);
+    const stacker = new Stacker(deployer);
 
-    let dao = new DAO(chain, deployer);
-    let stacker = new Stacker(chain, deployer);
-
-    let result = await stacker.stackExtend(1, wallet_1, 1);
-    result.expectErr().expectUint(20003);
+    expect(stacker.stackExtend(1, wallet_1, 1)).toBeErr(Cl.uint(20003));
 
     // Set protocol is inactive
-    result = await dao.setContractsEnabled(deployer, false);
-    result.expectOk().expectBool(true);
+    expect(dao.setContractsEnabled(deployer, false)).toBeOk(Cl.bool(true));
 
-    result = await stacker.stackExtend(1, deployer, 1);
-    result.expectErr().expectUint(20002);
-  }
-});
+    expect(stacker.stackExtend(1, deployer, 1)).toBeErr(Cl.uint(20002));
+  });
 
-Clarinet.test({
-  name: "stacker: can only return STX if protocol enabled, with correct reserve",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("stacker: can only return STX if protocol enabled, with correct reserve", () => {
+    const dao = new DAO(deployer);
+    const stacker = new Stacker(deployer);
 
-    let dao = new DAO(chain, deployer);
-    let stacker = new Stacker(chain, deployer);
-
-    let block = chain.mineBlock([
-      Tx.contractCall("stacker-1", "return-stx", [
-        types.principal(qualifiedName("fake-reserve")),
-      ], wallet_1.address)
-    ]);
-    block.receipts[0].result.expectErr().expectUint(20003);
+    const { result: fakeResult } = simnet.callPublicFn(
+      "stacker-1",
+      "return-stx",
+      [Cl.principal(qualifiedName("fake-reserve"))],
+      wallet_1,
+    );
+    expect(fakeResult).toBeErr(Cl.uint(20003));
 
     // Set protocol is inactive
-    let result = await dao.setContractsEnabled(deployer, false);
-    result.expectOk().expectBool(true);
+    expect(dao.setContractsEnabled(deployer, false)).toBeOk(Cl.bool(true));
 
-    result = await stacker.returnStx(1, deployer);
-    result.expectErr().expectUint(20002);
-  }
+    expect(stacker.returnStx(1, deployer)).toBeErr(Cl.uint(20002));
+  });
 });

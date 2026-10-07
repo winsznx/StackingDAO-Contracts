@@ -1,90 +1,84 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // DAO
 // ---------------------------------------------------------
 
-class DAO {
-  chain: Chain;
-  deployer: Account;
+export class DAO {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getContractsEnabled() {
-    return this.chain.callReadOnlyFn("dao", "get-contracts-enabled", [
-    ], this.deployer.address);
+  getContractsEnabled(): ClarityValue {
+    return simnet.callReadOnlyFn("dao", "get-contracts-enabled", [], this.deployer).result;
   }
 
-  getContractActive(address: string) {
-    return this.chain.callReadOnlyFn("dao", "get-contract-active", [
-      types.principal(address)
-    ], this.deployer.address);
+  getContractActive(address: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "dao",
+      "get-contract-active",
+      [Cl.principal(address)],
+      this.deployer,
+    ).result;
   }
 
-  getAdmin(address: string) {
-    return this.chain.callReadOnlyFn("dao", "get-admin", [
-      types.principal(address)
-    ], this.deployer.address);
+  getAdmin(address: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "dao",
+      "get-admin",
+      [Cl.principal(address)],
+      this.deployer,
+    ).result;
   }
 
-  checkIsEnabled(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("dao", "check-is-enabled", [
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  checkIsEnabled(caller: string): ClarityValue {
+    return simnet.callPublicFn("dao", "check-is-enabled", [], caller).result;
   }
 
-  checkIsProtocol(caller: Account, address: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("dao", "check-is-protocol", [
-        types.principal(address),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  checkIsProtocol(caller: string, address: string): ClarityValue {
+    return simnet.callPublicFn(
+      "dao",
+      "check-is-protocol",
+      [Cl.principal(address)],
+      caller,
+    ).result;
   }
 
-  checkIsAdmin(caller: Account, address: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("dao", "check-is-admin", [
-        types.principal(address),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  checkIsAdmin(caller: string, address: string): ClarityValue {
+    return simnet.callPublicFn(
+      "dao",
+      "check-is-admin",
+      [Cl.principal(address)],
+      caller,
+    ).result;
   }
 
-  setContractsEnabled(caller: Account, enabled: boolean) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("dao", "set-contracts-enabled", [
-        types.bool(enabled),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setContractsEnabled(caller: string, enabled: boolean): ClarityValue {
+    return simnet.callPublicFn(
+      "dao",
+      "set-contracts-enabled",
+      [Cl.bool(enabled)],
+      caller,
+    ).result;
   }
 
-  setContractActive(caller: Account, address: string, active: boolean) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("dao", "set-contract-active", [
-        types.principal(address),
-        types.bool(active),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setContractActive(caller: string, address: string, active: boolean): ClarityValue {
+    return simnet.callPublicFn(
+      "dao",
+      "set-contract-active",
+      [Cl.principal(address), Cl.bool(active)],
+      caller,
+    ).result;
   }
 
-  setAdmin(caller: Account, address: string, active: boolean) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("dao", "set-admin", [
-        types.principal(address),
-        types.bool(active),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setAdmin(caller: string, address: string, active: boolean): ClarityValue {
+    return simnet.callPublicFn(
+      "dao",
+      "set-admin",
+      [Cl.principal(address), Cl.bool(active)],
+      caller,
+    ).result;
   }
-
 }
-export { DAO };

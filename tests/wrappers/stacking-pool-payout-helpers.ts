@@ -1,70 +1,76 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // Stacking Pool Payout Helpers
 // ---------------------------------------------------------
 
-class StackingPoolPayout {
-  chain: Chain;
-  deployer: Account;
+export class StackingPoolPayout {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getLastRewardId() {
-    return this.chain.callReadOnlyFn("stacking-pool-payout-v1", "get-last-reward-id", [], this.deployer.address);
+  getLastRewardId(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacking-pool-payout-v1",
+      "get-last-reward-id",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getRewardsInfo(rewardsId: number) {
-    return this.chain.callReadOnlyFn("stacking-pool-payout-v1", "get-rewards-info", [
-      types.uint(rewardsId),
-    ], this.deployer.address);
+  getRewardsInfo(rewardsId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacking-pool-payout-v1",
+      "get-rewards-info",
+      [Cl.uint(rewardsId)],
+      this.deployer,
+    ).result;
   }
 
-  getTotalStacked(cycle: number) {
-    return this.chain.callReadOnlyFn("stacking-pool-payout-v1", "get-total-stacked", [
-      types.uint(cycle),
-    ], this.deployer.address);
+  getTotalStacked(cycle: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacking-pool-payout-v1",
+      "get-total-stacked",
+      [Cl.uint(cycle)],
+      this.deployer,
+    ).result;
   }
 
-  getUserStacked(user: string, cycle: number) {
-    return this.chain.callReadOnlyFn("stacking-pool-payout-v1", "get-user-stacked", [
-      types.principal(user),
-      types.uint(cycle),
-    ], this.deployer.address);
+  getUserStacked(user: string, cycle: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacking-pool-payout-v1",
+      "get-user-stacked",
+      [Cl.principal(user), Cl.uint(cycle)],
+      this.deployer,
+    ).result;
   }
 
-  depositRewards(caller: Account, amount: number, cycle: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("stacking-pool-payout-v1", "deposit-rewards", [
-        types.uint(amount * 1000000),
-        types.uint(cycle)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  depositRewards(caller: string, amount: number, cycle: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-pool-payout-v1",
+      "deposit-rewards",
+      [Cl.uint(amount * 1_000_000), Cl.uint(cycle)],
+      caller,
+    ).result;
   }
 
-  distributeRewards(caller: Account, users: string[], rewardId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("stacking-pool-payout-v1", "distribute-rewards", [
-        types.list(users.map(user => types.principal(user))),
-        types.uint(rewardId)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  distributeRewards(caller: string, users: string[], rewardId: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-pool-payout-v1",
+      "distribute-rewards",
+      [Cl.list(users.map((user) => Cl.principal(user))), Cl.uint(rewardId)],
+      caller,
+    ).result;
   }
 
-  getStx(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("stacking-pool-payout-v1", "get-stx", [
-        types.uint(amount * 1000000),
-        types.principal(receiver),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  getStx(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "stacking-pool-payout-v1",
+      "get-stx",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
-  
 }
-export { StackingPoolPayout };

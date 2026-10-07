@@ -1,197 +1,164 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "./tests-utils.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
+import { qualifiedName } from "./tests-utils";
 
 // ---------------------------------------------------------
 // Rewards
 // ---------------------------------------------------------
 
-class Rewards {
-  chain: Chain;
-  deployer: Account;
+export class Rewards {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getStStxCommissionContract() {
-    return this.chain.callReadOnlyFn(
+  getStStxCommissionContract(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "rewards-v5",
       "get-ststx-commission-contract",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getStStxBtcCommissionContract() {
-    return this.chain.callReadOnlyFn(
+  getStStxBtcCommissionContract(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "rewards-v5",
       "get-ststxbtc-commission-contract",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getCycleRewardsStStx(cycle: Number) {
-    return this.chain.callReadOnlyFn(
+  getCycleRewardsStStx(cycle: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "rewards-v5",
       "get-cycle-rewards-ststx",
-      [types.uint(cycle)],
-      this.deployer.address
-    );
+      [Cl.uint(cycle)],
+      this.deployer,
+    ).result;
   }
 
-  getCycleRewardsStStxBtc(cycle: Number) {
-    return this.chain.callReadOnlyFn(
+  getCycleRewardsStStxBtc(cycle: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "rewards-v5",
       "get-cycle-rewards-ststxbtc",
-      [types.uint(cycle)],
-      this.deployer.address
-    );
+      [Cl.uint(cycle)],
+      this.deployer,
+    ).result;
   }
 
-  getPoxCycle() {
-    return this.chain.callReadOnlyFn(
+  getPoxCycle(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "rewards-v5",
       "get-pox-cycle",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  addRewards(caller: Account, pool: string, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "add-rewards",
-        [types.principal(pool), types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  addRewards(caller: string, pool: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "rewards-v5",
+      "add-rewards",
+      [Cl.principal(pool), Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  addRewardsSBtc(caller: Account, pool: string, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "add-rewards-sbtc",
-        [types.principal(pool), types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  addRewardsSBtc(caller: string, pool: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "rewards-v5",
+      "add-rewards-sbtc",
+      [Cl.principal(pool), Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  shouldProcessRewards(cycle: Number) {
-    return this.chain.callReadOnlyFn(
+  shouldProcessRewards(cycle: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "rewards-v5",
       "should-process-rewards",
-      [types.uint(cycle)],
-      this.deployer.address
-    );
+      [Cl.uint(cycle)],
+      this.deployer,
+    ).result;
   }
 
-  processRewards(caller: Account, cycle: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "process-rewards",
-        [
-          types.uint(cycle),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("commission-btc-v1")),
-          types.principal(qualifiedName("staking-v1")),
-          types.principal(qualifiedName("reserve-v1")),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  processRewards(caller: string, cycle: number): ClarityValue {
+    return simnet.callPublicFn(
+      "rewards-v5",
+      "process-rewards",
+      [
+        Cl.uint(cycle),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("commission-btc-v1")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.principal(qualifiedName("reserve-v1")),
+      ],
+      caller,
+    ).result;
   }
 
-  getStx(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "get-stx",
-        [types.uint(amount * 1000000), types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  getStx(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "rewards-v5",
+      "get-stx",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  getSBtc(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "get-sbtc",
-        [types.uint(amount * 1000000), types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  getSBtc(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "rewards-v5",
+      "get-sbtc",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  setStStxCommissionContract(caller: Account, contract: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "set-ststx-commission-contract",
-        [types.principal(contract)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setStStxCommissionContract(caller: string, contract: string): ClarityValue {
+    return simnet.callPublicFn(
+      "rewards-v5",
+      "set-ststx-commission-contract",
+      [Cl.principal(contract)],
+      caller,
+    ).result;
   }
 
-  setStStxBtcCommissionContract(caller: Account, contract: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "set-ststxbtc-commission-contract",
-        [types.principal(contract)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setStStxBtcCommissionContract(caller: string, contract: string): ClarityValue {
+    return simnet.callPublicFn(
+      "rewards-v5",
+      "set-ststxbtc-commission-contract",
+      [Cl.principal(contract)],
+      caller,
+    ).result;
   }
 
-  getRewardCycleLength() {
-    return this.chain.callReadOnlyFn(
+  getRewardCycleLength(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "rewards-v5",
       "get-reward-cycle-length",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  setRewardsIntervalLength(caller: Account, interval: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "set-rewards-interval-length",
-        [types.uint(interval)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setRewardsIntervalLength(caller: string, interval: number): ClarityValue {
+    return simnet.callPublicFn(
+      "rewards-v5",
+      "set-rewards-interval-length",
+      [Cl.uint(interval)],
+      caller,
+    ).result;
   }
 
-  getRewardsIntervalLength() {
-    return this.chain.callReadOnlyFn(
+  getRewardsIntervalLength(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "rewards-v5",
       "get-rewards-interval-length",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
-
 }
-export { Rewards };

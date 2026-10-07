@@ -1,431 +1,269 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
-qualifiedName("");
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { StStxBtcTrackingData } from "../wrappers/ststxbtc-tracking-data-helpers.ts";
+import { qualifiedName, someValue, tupleField, uintWithDecimals } from "../wrappers/tests-utils";
+import { StStxBtcTrackingData } from "../wrappers/ststxbtc-tracking-data-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
 
 //-------------------------------------
 // Getters / Setters
 //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-tracking-data: can get/set total supply",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+describe("ststxbtc-tracking-data", () => {
+  it("ststxbtc-tracking-data: can get/set total supply", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(stStxBtcTrackingData.getTotalSupply()).toBeUint(0);
 
-    let call = await stStxBtcTrackingData.getTotalSupply();
-    call.result.expectUintWithDecimals(0);
+    expect(stStxBtcTrackingData.setTotalSupply(deployer, 1000)).toBeOk(Cl.bool(true));
 
-    let result = await stStxBtcTrackingData.setTotalSupply(deployer, 1000);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTrackingData.getTotalSupply()).toBeUint(1000 * 1_000_000);
+  });
 
-    call = await stStxBtcTrackingData.getTotalSupply();
-    call.result.expectUintWithDecimals(1000);
-  },
-});
+  it("ststxbtc-tracking-data: can get/set holder index", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-Clarinet.test({
-  name: "ststxbtc-tracking-data: can get/set holder index",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(0);
 
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(stStxBtcTrackingData.setNextHolderIndex(deployer, 1000)).toBeOk(Cl.bool(true));
 
-    let call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(0);
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(1000);
+  });
 
-    let result = await stStxBtcTrackingData.setNextHolderIndex(deployer, 1000);
-    result.expectOk().expectBool(true);
+  it("ststxbtc-tracking-data: can get/set cummulative rewards", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(1000);
-  },
-});
+    expect(stStxBtcTrackingData.getCummRewards()).toBeUint(0);
 
-Clarinet.test({
-  name: "ststxbtc-tracking-data: can get/set cummulative rewards",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(stStxBtcTrackingData.setCummReward(deployer, 1000)).toBeOk(Cl.bool(true));
 
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(stStxBtcTrackingData.getCummRewards()).toBeUint(1000);
+  });
 
-    let call = await stStxBtcTrackingData.getCummRewards();
-    call.result.expectUint(0);
+  it("ststxbtc-tracking-data: can get/set supported position", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    let result = await stStxBtcTrackingData.setCummReward(deployer, 1000);
-    result.expectOk().expectBool(true);
+    let position = stStxBtcTrackingData.getSupportedPositions(deployer);
+    expect(tupleField(position, "active")).toBeBool(false);
 
-    call = await stStxBtcTrackingData.getCummRewards();
-    call.result.expectUint(1000);
-  },
-});
+    expect(
+      stStxBtcTrackingData.setSupportedPositions(
+        deployer,
+        deployer,
+        true,
+        qualifiedName("position-mock"),
+        10,
+        20,
+      ),
+    ).toBeOk(Cl.bool(true));
 
-Clarinet.test({
-  name: "ststxbtc-tracking-data: can get/set supported position",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    position = stStxBtcTrackingData.getSupportedPositions(deployer);
+    expect(tupleField(position, "active")).toBeBool(true);
+    expect(tupleField(position, "total")).toBeUint(uintWithDecimals(10).value);
+    expect(tupleField(position, "deactivated-cumm-reward")).toBeUint(20);
+    expect(tupleField(position, "reserve")).toBePrincipal(qualifiedName("position-mock"));
+  });
 
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+  it("ststxbtc-tracking-data: can get/set holder index to address", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    let call = await stStxBtcTrackingData.getSupportedPositions(
-      deployer.address
-    );
-    call.result.expectTuple()["active"].expectBool(false);
+    expect(stStxBtcTrackingData.getHoldersIndexToAddress(100)).toBeNone();
 
-    let result = await stStxBtcTrackingData.setSupportedPositions(
-      deployer,
-      deployer.address,
-      true,
-      qualifiedName("position-mock"),
-      10,
-      20
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTrackingData.setHoldersIndexToAddress(deployer, 1000, deployer),
+    ).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTrackingData.getSupportedPositions(deployer.address);
-    call.result.expectTuple()["active"].expectBool(true);
-    call.result.expectTuple()["total"].expectUintWithDecimals(10);
-    call.result.expectTuple()["deactivated-cumm-reward"].expectUint(20);
-    call.result
-      .expectTuple()
-      ["reserve"].expectPrincipal(qualifiedName("position-mock"));
-  },
-});
+    expect(someValue(stStxBtcTrackingData.getHoldersIndexToAddress(1000))).toBePrincipal(deployer);
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking-data: can get/set holder index to address",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("ststxbtc-tracking-data: can get/set holder address to index", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(stStxBtcTrackingData.getHoldersAddressToIndex(deployer)).toBeNone();
 
-    let call = await stStxBtcTrackingData.getHoldersIndexToAddress(100);
-    call.result.expectNone();
+    expect(
+      stStxBtcTrackingData.setHoldersAddressToIndex(deployer, deployer, 1000),
+    ).toBeOk(Cl.bool(true));
 
-    let result = await stStxBtcTrackingData.setHoldersIndexToAddress(
-      deployer,
-      1000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(someValue(stStxBtcTrackingData.getHoldersAddressToIndex(deployer))).toBeUint(1000);
+  });
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(1000);
-    call.result.expectSome().expectPrincipal(deployer.address);
-  },
-});
+  it("ststxbtc-tracking-data: can get/set holder position", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-Clarinet.test({
-  name: "ststxbtc-tracking-data: can get/set holder address to index",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    let position = stStxBtcTrackingData.getHolderPosition(deployer, deployer);
+    expect(tupleField(position, "amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(position, "cumm-reward")).toBeUint(0);
 
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(
+      stStxBtcTrackingData.setHolderPosition(deployer, deployer, deployer, 1000, 10),
+    ).toBeOk(Cl.bool(true));
 
-    let call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      deployer.address
-    );
-    call.result.expectNone();
+    position = stStxBtcTrackingData.getHolderPosition(deployer, deployer);
+    expect(tupleField(position, "amount")).toBeUint(uintWithDecimals(1000).value);
+    expect(tupleField(position, "cumm-reward")).toBeUint(10);
+  });
 
-    let result = await stStxBtcTrackingData.setHoldersAddressToIndex(
-      deployer,
-      deployer.address,
-      1000
-    );
-    result.expectOk().expectBool(true);
+  //-------------------------------------
+  // Helpers
+  //-------------------------------------
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      deployer.address
-    );
-    call.result.expectSome().expectUint(1000);
-  },
-});
-
-Clarinet.test({
-  name: "ststxbtc-tracking-data: can get/set holder position",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
-
-    let call = await stStxBtcTrackingData.getHolderPosition(
-      deployer.address,
-      deployer.address
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["cumm-reward"].expectUint(0);
-
-    let result = await stStxBtcTrackingData.setHolderPosition(
-      deployer,
-      deployer.address,
-      deployer.address,
-      1000,
-      10
-    );
-    result.expectOk().expectBool(true);
-
-    call = await stStxBtcTrackingData.getHolderPosition(
-      deployer.address,
-      deployer.address
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(1000);
-    call.result.expectTuple()["cumm-reward"].expectUint(10);
-  },
-});
-
-//-------------------------------------
-// Helpers
-//-------------------------------------
-
-Clarinet.test({
-  name: "ststxbtc-tracking-data: add holder",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+  it("ststxbtc-tracking-data: add holder", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
     // Data
-    let call = await stStxBtcTrackingData.getHolderPosition(
-      deployer.address,
-      deployer.address
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["cumm-reward"].expectUint(0);
+    let position = stStxBtcTrackingData.getHolderPosition(deployer, deployer);
+    expect(tupleField(position, "amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(position, "cumm-reward")).toBeUint(0);
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      deployer.address
-    );
-    call.result.expectNone();
+    expect(stStxBtcTrackingData.getHoldersAddressToIndex(deployer)).toBeNone();
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(0);
-    call.result.expectNone();
+    expect(stStxBtcTrackingData.getHoldersIndexToAddress(0)).toBeNone();
 
-    call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(0);
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(0);
 
     // Add
-    let result = await stStxBtcTrackingData.addHolder(
-      deployer,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTrackingData.addHolder(deployer, deployer)).toBeOk(Cl.bool(true));
 
     // Data
-    call = await stStxBtcTrackingData.getHolderPosition(
-      deployer.address,
-      deployer.address
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["cumm-reward"].expectUint(0);
+    position = stStxBtcTrackingData.getHolderPosition(deployer, deployer);
+    expect(tupleField(position, "amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(position, "cumm-reward")).toBeUint(0);
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      deployer.address
-    );
-    call.result.expectSome().expectUint(0);
+    expect(someValue(stStxBtcTrackingData.getHoldersAddressToIndex(deployer))).toBeUint(0);
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(0);
-    call.result.expectSome().expectPrincipal(deployer.address);
+    expect(someValue(stStxBtcTrackingData.getHoldersIndexToAddress(0))).toBePrincipal(deployer);
 
-    call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(1);
-  },
-});
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(1);
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking-data: update holder position",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+  it("ststxbtc-tracking-data: update holder position", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
     // Data
-    let call = await stStxBtcTrackingData.getHolderPosition(
-      deployer.address,
-      qualifiedName("position-mock")
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["cumm-reward"].expectUint(0);
+    let position = stStxBtcTrackingData.getHolderPosition(deployer, qualifiedName("position-mock"));
+    expect(tupleField(position, "amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(position, "cumm-reward")).toBeUint(0);
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      deployer.address
-    );
-    call.result.expectNone();
+    expect(stStxBtcTrackingData.getHoldersAddressToIndex(deployer)).toBeNone();
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(0);
-    call.result.expectNone();
+    expect(stStxBtcTrackingData.getHoldersIndexToAddress(0)).toBeNone();
 
-    call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(0);
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(0);
 
     // Update
-    let result = await stStxBtcTrackingData.updateHolderPosition(
-      deployer,
-      deployer.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTrackingData.updateHolderPosition(deployer, deployer, qualifiedName("position-mock")),
+    ).toBeOk(Cl.bool(true));
 
     // Data
-    call = await stStxBtcTrackingData.getHolderPosition(
-      deployer.address,
-      qualifiedName("position-mock")
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["cumm-reward"].expectUint(0);
+    position = stStxBtcTrackingData.getHolderPosition(deployer, qualifiedName("position-mock"));
+    expect(tupleField(position, "amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(position, "cumm-reward")).toBeUint(0);
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      deployer.address
-    );
-    call.result.expectSome().expectUint(0);
+    expect(someValue(stStxBtcTrackingData.getHoldersAddressToIndex(deployer))).toBeUint(0);
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(0);
-    call.result.expectSome().expectPrincipal(deployer.address);
+    expect(someValue(stStxBtcTrackingData.getHoldersIndexToAddress(0))).toBePrincipal(deployer);
 
-    call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(1);
-  },
-});
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(1);
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking-data: update holder position amount",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+  it("ststxbtc-tracking-data: update holder position amount", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
     // Data
-    let call = await stStxBtcTrackingData.getHolderPosition(
-      deployer.address,
-      qualifiedName("position-mock")
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(0);
-    call.result.expectTuple()["cumm-reward"].expectUint(0);
+    let position = stStxBtcTrackingData.getHolderPosition(deployer, qualifiedName("position-mock"));
+    expect(tupleField(position, "amount")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(position, "cumm-reward")).toBeUint(0);
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      deployer.address
-    );
-    call.result.expectNone();
+    expect(stStxBtcTrackingData.getHoldersAddressToIndex(deployer)).toBeNone();
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(0);
-    call.result.expectNone();
+    expect(stStxBtcTrackingData.getHoldersIndexToAddress(0)).toBeNone();
 
-    call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(0);
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(0);
 
     // Update
-    let result = await stStxBtcTrackingData.updateHolderPositionAmount(
-      deployer,
-      deployer.address,
-      qualifiedName("position-mock"),
-      1000
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTrackingData.updateHolderPositionAmount(
+        deployer,
+        deployer,
+        qualifiedName("position-mock"),
+        1000,
+      ),
+    ).toBeOk(Cl.bool(true));
 
     // Data
-    call = await stStxBtcTrackingData.getHolderPosition(
-      deployer.address,
-      qualifiedName("position-mock")
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(1000);
-    call.result.expectTuple()["cumm-reward"].expectUint(0);
+    position = stStxBtcTrackingData.getHolderPosition(deployer, qualifiedName("position-mock"));
+    expect(tupleField(position, "amount")).toBeUint(uintWithDecimals(1000).value);
+    expect(tupleField(position, "cumm-reward")).toBeUint(0);
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      deployer.address
-    );
-    call.result.expectSome().expectUint(0);
+    expect(someValue(stStxBtcTrackingData.getHoldersAddressToIndex(deployer))).toBeUint(0);
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(0);
-    call.result.expectSome().expectPrincipal(deployer.address);
+    expect(someValue(stStxBtcTrackingData.getHoldersIndexToAddress(0))).toBePrincipal(deployer);
 
-    call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(1);
-  },
-});
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(1);
+  });
 
-//-------------------------------------
-// Access
-//-------------------------------------
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-tracking-data: only protocol can call setters and helpers",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("ststxbtc-tracking-data: only protocol can call setters and helpers", () => {
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(stStxBtcTrackingData.setTotalSupply(wallet_1, 1000)).toBeErr(Cl.uint(20003));
 
-    let result = await stStxBtcTrackingData.setTotalSupply(wallet_1, 1000);
-    result.expectErr().expectUint(20003);
+    expect(stStxBtcTrackingData.setNextHolderIndex(wallet_1, 1000)).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTrackingData.setNextHolderIndex(wallet_1, 1000);
-    result.expectErr().expectUint(20003);
+    expect(stStxBtcTrackingData.setCummReward(wallet_1, 1000)).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTrackingData.setCummReward(wallet_1, 1000);
-    result.expectErr().expectUint(20003);
+    expect(
+      stStxBtcTrackingData.setSupportedPositions(
+        wallet_1,
+        wallet_1,
+        true,
+        qualifiedName("position-mock"),
+        0,
+        0,
+      ),
+    ).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTrackingData.setSupportedPositions(
-      wallet_1,
-      wallet_1.address,
-      true,
-      qualifiedName("position-mock"),
-      0,
-      0
-    );
-    result.expectErr().expectUint(20003);
+    expect(
+      stStxBtcTrackingData.setHoldersAddressToIndex(wallet_1, wallet_1, 1),
+    ).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTrackingData.setHoldersAddressToIndex(
-      wallet_1,
-      wallet_1.address,
-      1
-    );
-    result.expectErr().expectUint(20003);
+    expect(
+      stStxBtcTrackingData.setHoldersIndexToAddress(wallet_1, 1, wallet_1),
+    ).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTrackingData.setHoldersIndexToAddress(
-      wallet_1,
-      1,
-      wallet_1.address
-    );
-    result.expectErr().expectUint(20003);
+    expect(
+      stStxBtcTrackingData.setHolderPosition(wallet_1, wallet_1, wallet_1, 1000, 10),
+    ).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTrackingData.setHolderPosition(
-      wallet_1,
-      wallet_1.address,
-      wallet_1.address,
-      1000,
-      10
-    );
-    result.expectErr().expectUint(20003);
+    expect(stStxBtcTrackingData.addHolder(wallet_1, wallet_1)).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTrackingData.addHolder(wallet_1, wallet_1.address);
-    result.expectErr().expectUint(20003);
+    expect(
+      stStxBtcTrackingData.updateHolderPosition(wallet_1, wallet_1, qualifiedName("position-mock")),
+    ).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTrackingData.updateHolderPosition(
-      wallet_1,
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    result.expectErr().expectUint(20003);
+    expect(
+      stStxBtcTrackingData.updateHolderPositionAmount(
+        wallet_1,
+        wallet_1,
+        qualifiedName("position-mock"),
+        1000,
+      ),
+    ).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTrackingData.updateHolderPositionAmount(
-      wallet_1,
-      wallet_1.address,
-      qualifiedName("position-mock"),
-      1000
-    );
-    result.expectErr().expectUint(20003);
-
-    result = await stStxBtcTrackingData.updateSupportedPositionsTotal(
-      wallet_1,
-      qualifiedName("position-mock"),
-      1000
-    );
-    result.expectErr().expectUint(20003);
-  },
+    expect(
+      stStxBtcTrackingData.updateSupportedPositionsTotal(
+        wallet_1,
+        qualifiedName("position-mock"),
+        1000,
+      ),
+    ).toBeErr(Cl.uint(20003));
+  });
 });

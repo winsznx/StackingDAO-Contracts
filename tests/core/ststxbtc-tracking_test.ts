@@ -1,1633 +1,1020 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
-qualifiedName("");
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { SBtcToken } from "../wrappers/sbtc-token-helpers.ts";
-import { StStxBtcToken } from "../wrappers/ststxbtc-token-helpers.ts";
-import { StStxBtcTracking } from "../wrappers/ststxbtc-tracking-helpers.ts";
-import { StStxBtcTrackingData } from "../wrappers/ststxbtc-tracking-data-helpers.ts";
+import { listElement, okValue, qualifiedName, uintWithDecimals } from "../wrappers/tests-utils";
+import { SBtcToken } from "../wrappers/sbtc-token-helpers";
+import { StStxBtcToken } from "../wrappers/ststxbtc-token-helpers";
+import { StStxBtcTracking } from "../wrappers/ststxbtc-tracking-helpers";
+import { StStxBtcTrackingData } from "../wrappers/ststxbtc-tracking-data-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
+const wallet_3 = accounts.get("wallet_3")!;
 
 //-------------------------------------
 // Tracking
 //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-tracking: refresh-wallet will add holder once",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+describe("ststxbtc-tracking", () => {
+  it("ststxbtc-tracking: refresh-wallet will add holder once", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
     // Mint
-    let result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      wallet_2.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Position
-    let call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_1.address,
-      wallet_1.address
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(2000);
-    call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_2.address,
-      wallet_2.address
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(1000);
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_1, wallet_1)).toBeTuple({
+      amount: uintWithDecimals(2000),
+      "cumm-reward": Cl.uint(0),
+    });
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_2, wallet_2)).toBeTuple({
+      amount: uintWithDecimals(1000),
+      "cumm-reward": Cl.uint(0),
+    });
 
     // List
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      wallet_1.address
-    );
-    call.result.expectSome().expectUint(0);
+    expect(stStxBtcTrackingData.getHoldersAddressToIndex(wallet_1)).toBeSome(Cl.uint(0));
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      wallet_2.address
-    );
-    call.result.expectSome().expectUint(1);
+    expect(stStxBtcTrackingData.getHoldersAddressToIndex(wallet_2)).toBeSome(Cl.uint(1));
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(0);
-    call.result.expectSome().expectPrincipal(wallet_1.address);
+    expect(stStxBtcTrackingData.getHoldersIndexToAddress(0)).toBeSome(Cl.principal(wallet_1));
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(1);
-    call.result.expectSome().expectPrincipal(wallet_2.address);
+    expect(stStxBtcTrackingData.getHoldersIndexToAddress(1)).toBeSome(Cl.principal(wallet_2));
 
-    call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(2);
-  },
-});
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(2);
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: refresh-position will add holder once",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+  it("ststxbtc-tracking: refresh-position will add holder once", () => {
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, qualifiedName("position-mock"))).toBeOk(Cl.bool(true));
 
-    let result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
-
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
     // Position
-    let call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(0);
-    call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_2.address,
-      qualifiedName("position-mock")
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(0);
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_1, qualifiedName("position-mock"))).toBeTuple({
+      amount: uintWithDecimals(0),
+      "cumm-reward": Cl.uint(0),
+    });
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_2, qualifiedName("position-mock"))).toBeTuple({
+      amount: uintWithDecimals(0),
+      "cumm-reward": Cl.uint(0),
+    });
 
     // Refresh
-    result = await stStxBtcTracking.refreshPosition(
-      wallet_1,
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
-    result = await stStxBtcTracking.refreshPosition(
-      wallet_1,
-      wallet_2.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
+    expect(stStxBtcTracking.refreshPosition(wallet_1, wallet_1, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
+    expect(stStxBtcTracking.refreshPosition(wallet_1, wallet_2, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
 
     // Position
-    call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(100);
-    call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_2.address,
-      qualifiedName("position-mock")
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(100);
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_1, qualifiedName("position-mock"))).toBeTuple({
+      amount: uintWithDecimals(100),
+      "cumm-reward": Cl.uint(0),
+    });
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_2, qualifiedName("position-mock"))).toBeTuple({
+      amount: uintWithDecimals(100),
+      "cumm-reward": Cl.uint(0),
+    });
 
     // List
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      qualifiedName("position-mock")
-    );
-    call.result.expectSome().expectUint(0);
+    expect(stStxBtcTrackingData.getHoldersAddressToIndex(qualifiedName("position-mock"))).toBeSome(Cl.uint(0));
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      wallet_1.address
-    );
-    call.result.expectSome().expectUint(1);
+    expect(stStxBtcTrackingData.getHoldersAddressToIndex(wallet_1)).toBeSome(Cl.uint(1));
 
-    call = await stStxBtcTrackingData.getHoldersAddressToIndex(
-      wallet_2.address
-    );
-    call.result.expectSome().expectUint(2);
+    expect(stStxBtcTrackingData.getHoldersAddressToIndex(wallet_2)).toBeSome(Cl.uint(2));
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(0);
-    call.result.expectSome().expectPrincipal(qualifiedName("position-mock"));
+    expect(stStxBtcTrackingData.getHoldersIndexToAddress(0)).toBeSome(Cl.principal(qualifiedName("position-mock")));
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(1);
-    call.result.expectSome().expectPrincipal(wallet_1.address);
+    expect(stStxBtcTrackingData.getHoldersIndexToAddress(1)).toBeSome(Cl.principal(wallet_1));
 
-    call = await stStxBtcTrackingData.getHoldersIndexToAddress(2);
-    call.result.expectSome().expectPrincipal(wallet_2.address);
+    expect(stStxBtcTrackingData.getHoldersIndexToAddress(2)).toBeSome(Cl.principal(wallet_2));
 
-    call = await stStxBtcTrackingData.getNextHolderIndex();
-    call.result.expectUint(3);
-  },
-});
+    expect(stStxBtcTrackingData.getNextHolderIndex()).toBeUint(3);
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: refresh-wallet will save rewards if any",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+  it("ststxbtc-tracking: refresh-wallet will save rewards if any", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const sBtcToken = new SBtcToken(deployer);
 
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
-
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
     // Mint
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      2000,
-      wallet_2.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 300);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 300)).toBeOk(Cl.bool(true));
 
     // Rewards
-    let call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: wallet_2, position: wallet_2 },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(100, 8)),
+      Cl.ok(uintWithDecimals(200, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(100, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(200, 8);
 
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-    call = await sBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0, 8));
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(0, 8));
 
     // Refresh wallet
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      2000,
-      wallet_2.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Rewards
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: wallet_2, position: wallet_2 },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(100, 8)),
+      Cl.ok(uintWithDecimals(200, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(100, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(200, 8);
 
-    call = await stStxBtcTracking.getSavedRewards(deployer.address, deployer.address);
-    call.result.expectUintWithDecimals(0, 8);
-    call = await stStxBtcTracking.getSavedRewards(wallet_1.address, wallet_1.address);
-    call.result.expectUintWithDecimals(0, 8);  
-    call = await stStxBtcTracking.getSavedRewards(wallet_2.address, wallet_2.address);
-    call.result.expectUintWithDecimals(200, 8);
+    expect(stStxBtcTracking.getSavedRewards(deployer, deployer)).toBeUint(uintWithDecimals(0, 8).value);
+    expect(stStxBtcTracking.getSavedRewards(wallet_1, wallet_1)).toBeUint(uintWithDecimals(0, 8).value);
+    expect(stStxBtcTracking.getSavedRewards(wallet_2, wallet_2)).toBeUint(uintWithDecimals(200, 8).value);
 
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-    call = await sBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0, 8));
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(0, 8));
 
     // Claim
-    result = await stStxBtcTracking.claimPendingRewards(deployer, deployer.address, deployer.address);
-    result.expectOk().expectUintWithDecimals(0, 8);
-    result = await stStxBtcTracking.claimPendingRewards(wallet_1, wallet_1.address, wallet_1.address);
-    result.expectOk().expectUintWithDecimals(100, 8);
-    result = await stStxBtcTracking.claimPendingRewards(wallet_2, wallet_2.address, wallet_2.address);
-    result.expectOk().expectUintWithDecimals(200, 8);
+    expect(stStxBtcTracking.claimPendingRewards(deployer, deployer, deployer)).toBeOk(uintWithDecimals(0, 8));
+    expect(stStxBtcTracking.claimPendingRewards(wallet_1, wallet_1, wallet_1)).toBeOk(uintWithDecimals(100, 8));
+    expect(stStxBtcTracking.claimPendingRewards(wallet_2, wallet_2, wallet_2)).toBeOk(uintWithDecimals(200, 8));
 
-    call = await stStxBtcTracking.getSavedRewards(deployer.address, deployer.address);
-    call.result.expectUintWithDecimals(0, 8);
-    call = await stStxBtcTracking.getSavedRewards(wallet_1.address, wallet_1.address);
-    call.result.expectUintWithDecimals(0, 8);  
+    expect(stStxBtcTracking.getSavedRewards(deployer, deployer)).toBeUint(uintWithDecimals(0, 8).value);
+    expect(stStxBtcTracking.getSavedRewards(wallet_1, wallet_1)).toBeUint(uintWithDecimals(0, 8).value);
 
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(100, 8);
-    call = await sBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(200, 8);
-  },
-});
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(100, 8));
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(200, 8));
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: refresh-position will save rewards if any",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+  it("ststxbtc-tracking: refresh-position will save rewards if any", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const sBtcToken = new SBtcToken(deployer);
 
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
-    let result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
-
-    result = await sBtcToken.protocolMint(deployer, 100000, deployer.address);
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
     // Mint
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      100,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 100, qualifiedName("position-mock"))).toBeOk(Cl.bool(true));
 
     // Rewards
-    let call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
-      { holder: wallet_2.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+        { holder: wallet_2, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
 
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-    call = await sBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0, 8));
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(0, 8));
 
     // Refresh
-    result = await stStxBtcTracking.refreshPosition(
-      wallet_2,
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
+    expect(stStxBtcTracking.refreshPosition(wallet_2, wallet_1, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 300);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 300)).toBeOk(Cl.bool(true));
 
     // Rewards
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
-      { holder: wallet_2.address, position: wallet_2.address },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+        { holder: wallet_2, position: wallet_2 },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(300, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(300, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
 
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-    call = await sBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0, 8));
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(0, 8));
 
     // Refresh
-    result = await stStxBtcTracking.refreshPosition(
-      wallet_2,
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
+    expect(stStxBtcTracking.refreshPosition(wallet_2, wallet_1, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
 
     // Rewards
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
-      { holder: wallet_2.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+        { holder: wallet_2, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(300, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(300, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
 
-    call = await stStxBtcTracking.getSavedRewards(deployer.address, qualifiedName("position-mock"));
-    call.result.expectUintWithDecimals(0, 8);
-    call = await stStxBtcTracking.getSavedRewards(wallet_1.address, qualifiedName("position-mock"));
-    call.result.expectUintWithDecimals(300, 8);  
-    call = await stStxBtcTracking.getSavedRewards(wallet_2.address, qualifiedName("position-mock"));
-    call.result.expectUintWithDecimals(0, 8);
+    expect(stStxBtcTracking.getSavedRewards(deployer, qualifiedName("position-mock"))).toBeUint(uintWithDecimals(0, 8).value);
+    expect(stStxBtcTracking.getSavedRewards(wallet_1, qualifiedName("position-mock"))).toBeUint(uintWithDecimals(300, 8).value);
+    expect(stStxBtcTracking.getSavedRewards(wallet_2, qualifiedName("position-mock"))).toBeUint(uintWithDecimals(0, 8).value);
 
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-    call = await sBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0, 8));
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(0, 8));
 
     // Claim
-    result = await stStxBtcTracking.claimPendingRewards(deployer, deployer.address, qualifiedName("position-mock"));
-    result.expectOk().expectUintWithDecimals(0, 8);
-    result = await stStxBtcTracking.claimPendingRewards(wallet_1, wallet_1.address, qualifiedName("position-mock"));
-    result.expectOk().expectUintWithDecimals(300, 8);
-    result = await stStxBtcTracking.claimPendingRewards(wallet_2, wallet_2.address, qualifiedName("position-mock"));
-    result.expectOk().expectUintWithDecimals(0, 8);
+    expect(stStxBtcTracking.claimPendingRewards(deployer, deployer, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(0, 8));
+    expect(stStxBtcTracking.claimPendingRewards(wallet_1, wallet_1, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(300, 8));
+    expect(stStxBtcTracking.claimPendingRewards(wallet_2, wallet_2, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(0, 8));
 
-    call = await stStxBtcTracking.getSavedRewards(deployer.address, qualifiedName("position-mock"));
-    call.result.expectUintWithDecimals(0, 8);
-    call = await stStxBtcTracking.getSavedRewards(wallet_1.address, qualifiedName("position-mock"));
-    call.result.expectUintWithDecimals(0, 8);  
+    expect(stStxBtcTracking.getSavedRewards(deployer, qualifiedName("position-mock"))).toBeUint(uintWithDecimals(0, 8).value);
+    expect(stStxBtcTracking.getSavedRewards(wallet_1, qualifiedName("position-mock"))).toBeUint(uintWithDecimals(0, 8).value);
 
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(300, 8);
-    call = await sBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-  },
-});
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(300, 8));
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(0, 8));
+  });
 
-//-------------------------------------
-// Rewards
-//-------------------------------------
+  //-------------------------------------
+  // Rewards
+  //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-tracking: can add and claim rewards",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+  it("ststxbtc-tracking: can add and claim rewards", () => {
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 70000, deployer)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 20000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 10000, wallet_2)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      70000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      20000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      10000,
-      wallet_2.address
-    );
-    result.expectOk().expectBool(true);
-
-    let call = await stStxBtcTrackingData.getTotalSupply();
-    call.result.expectUintWithDecimals(100000);
+    expect(stStxBtcTrackingData.getTotalSupply()).toBeUint(100000 * 1_000_000);
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 1000);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 1000)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTracking.getPendingRewards(
-      deployer.address,
-      deployer.address
-    );
-    call.result.expectOk().expectUintWithDecimals((70000 / 100000) * 1000, 8);
+    expect(stStxBtcTracking.getPendingRewards(deployer, deployer)).toBeOk(uintWithDecimals((70000 / 100000) * 1000, 8));
 
-    call = await stStxBtcTracking.getPendingRewards(
-      wallet_1.address,
-      wallet_1.address
-    );
-    call.result.expectOk().expectUintWithDecimals((20000 / 100000) * 1000, 8);
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals((20000 / 100000) * 1000, 8));
 
-    call = await stStxBtcTracking.getPendingRewards(
-      wallet_2.address,
-      wallet_2.address
-    );
-    call.result.expectOk().expectUintWithDecimals((10000 / 100000) * 1000, 8);
+    expect(stStxBtcTracking.getPendingRewards(wallet_2, wallet_2)).toBeOk(uintWithDecimals((10000 / 100000) * 1000, 8));
 
     // Claim rewards
-    result = await stStxBtcTracking.claimPendingRewards(
-      deployer,
-      deployer.address,
-      deployer.address
-    );
-    result.expectOk().expectUintWithDecimals((70000 / 100000) * 1000, 8);
+    expect(stStxBtcTracking.claimPendingRewards(deployer, deployer, deployer)).toBeOk(uintWithDecimals((70000 / 100000) * 1000, 8));
 
-    result = await stStxBtcTracking.claimPendingRewards(
-      deployer,
-      wallet_1.address,
-      wallet_1.address
-    );
-    result.expectOk().expectUintWithDecimals((20000 / 100000) * 1000, 8);
+    expect(stStxBtcTracking.claimPendingRewards(deployer, wallet_1, wallet_1)).toBeOk(uintWithDecimals((20000 / 100000) * 1000, 8));
 
-    result = await stStxBtcTracking.claimPendingRewards(
-      deployer,
-      wallet_2.address,
-      wallet_2.address
-    );
-    result.expectOk().expectUintWithDecimals((10000 / 100000) * 1000, 8);
+    expect(stStxBtcTracking.claimPendingRewards(deployer, wallet_2, wallet_2)).toBeOk(uintWithDecimals((10000 / 100000) * 1000, 8));
 
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals((20000 / 100000) * 1000, 8);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals((20000 / 100000) * 1000, 8));
 
-    call = await sBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals((10000 / 100000) * 1000, 8);
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals((10000 / 100000) * 1000, 8));
 
-    call = await stStxBtcTracking.getPendingRewards(
-      deployer.address,
-      deployer.address
-    );
-    call.result.expectOk().expectUintWithDecimals(0, 8);
-  },
-});
+    expect(stStxBtcTracking.getPendingRewards(deployer, deployer)).toBeOk(uintWithDecimals(0, 8));
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: can get and claim multiple rewards",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-    let wallet_3 = accounts.get("wallet_3")!;
+  it("ststxbtc-tracking: can get and claim multiple rewards", () => {
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 70000, deployer)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 20000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 5000, wallet_2)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 5000, wallet_3)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      70000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      20000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      5000,
-      wallet_2.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      5000,
-      wallet_3.address
-    );
-    result.expectOk().expectBool(true);
-
-    let call = await stStxBtcTrackingData.getTotalSupply();
-    call.result.expectUintWithDecimals(100000);
+    expect(stStxBtcTrackingData.getTotalSupply()).toBeUint(100000 * 1_000_000);
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 1000);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 1000)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
-      { holder: wallet_3.address, position: wallet_3.address },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: wallet_2, position: wallet_2 },
+        { holder: wallet_3, position: wallet_3 },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals((70000 / 100000) * 1000, 8)),
+      Cl.ok(uintWithDecimals((20000 / 100000) * 1000, 8)),
+      Cl.ok(uintWithDecimals((5000 / 100000) * 1000, 8)),
+      Cl.ok(uintWithDecimals((5000 / 100000) * 1000, 8)),
     ]);
-    call.result
-      .expectList()[0]
-      .expectOk()
-      .expectUintWithDecimals((70000 / 100000) * 1000, 8);
-    call.result
-      .expectList()[1]
-      .expectOk()
-      .expectUintWithDecimals((20000 / 100000) * 1000, 8);
-    call.result
-      .expectList()[2]
-      .expectOk()
-      .expectUintWithDecimals((5000 / 100000) * 1000, 8);
-    call.result
-      .expectList()[3]
-      .expectOk()
-      .expectUintWithDecimals((5000 / 100000) * 1000, 8);
 
-    result = await stStxBtcTracking.claimPendingRewardsMany(wallet_1, [
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
-    ]);
-    result
-      .expectOk()
-      .expectList()[0]
-      .expectOk()
-      .expectUintWithDecimals((70000 / 100000) * 1000, 8);
-    result
-      .expectOk()
-      .expectList()[1]
-      .expectOk()
-      .expectUintWithDecimals((20000 / 100000) * 1000, 8);
-    result
-      .expectOk()
-      .expectList()[2]
-      .expectOk()
-      .expectUintWithDecimals((5000 / 100000) * 1000, 8);
-
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
-      { holder: wallet_3.address, position: wallet_3.address },
-    ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
-    call.result
-      .expectList()[3]
-      .expectOk()
-      .expectUintWithDecimals((5000 / 100000) * 1000, 8);
-
-    result = await stStxBtcTracking.claimPendingRewardsMany(wallet_1, [
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
-      { holder: wallet_3.address, position: wallet_3.address },
-    ]);
-    result.expectOk().expectList()[0].expectOk().expectUintWithDecimals(0, 8);
-    result.expectOk().expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    result.expectOk().expectList()[2].expectOk().expectUintWithDecimals(0, 8);
-    result
-      .expectOk()
-      .expectList()[3]
-      .expectOk()
-      .expectUintWithDecimals((5000 / 100000) * 1000, 8);
-
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
-      { holder: wallet_3.address, position: wallet_3.address },
-    ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[3].expectOk().expectUintWithDecimals(0, 8);
-  },
-});
-
-Clarinet.test({
-  name: "ststxbtc-tracking: get and claim many rewards",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
-
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
+    expect(
+      stStxBtcTracking.claimPendingRewardsMany(wallet_1, [
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: wallet_2, position: wallet_2 },
+      ]),
+    ).toBeOk(
+      Cl.list([
+        Cl.ok(uintWithDecimals((70000 / 100000) * 1000, 8)),
+        Cl.ok(uintWithDecimals((20000 / 100000) * 1000, 8)),
+        Cl.ok(uintWithDecimals((5000 / 100000) * 1000, 8)),
+      ]),
     );
-    result.expectOk().expectBool(true);
+
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: wallet_2, position: wallet_2 },
+        { holder: wallet_3, position: wallet_3 },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals((5000 / 100000) * 1000, 8)),
+    ]);
+
+    expect(
+      stStxBtcTracking.claimPendingRewardsMany(wallet_1, [
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: wallet_2, position: wallet_2 },
+        { holder: wallet_3, position: wallet_3 },
+      ]),
+    ).toBeOk(
+      Cl.list([
+        Cl.ok(uintWithDecimals(0, 8)),
+        Cl.ok(uintWithDecimals(0, 8)),
+        Cl.ok(uintWithDecimals(0, 8)),
+        Cl.ok(uintWithDecimals((5000 / 100000) * 1000, 8)),
+      ]),
+    );
+
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: wallet_2, position: wallet_2 },
+        { holder: wallet_3, position: wallet_3 },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+    ]);
+  });
+
+  it("ststxbtc-tracking: get and claim many rewards", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const sBtcToken = new SBtcToken(deployer);
+
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
     // Mint
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      2000,
-      wallet_2.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 300);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 300)).toBeOk(Cl.bool(true));
 
     // Rewards
-    let infoArray = [
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
+    const infoArray = [
+      { holder: deployer, position: deployer },
+      { holder: wallet_1, position: wallet_1 },
+      { holder: wallet_2, position: wallet_2 },
     ];
     for (let i = 0; i < 195; i++) {
-      infoArray.push({ holder: deployer.address, position: deployer.address });
+      infoArray.push({ holder: deployer, position: deployer });
     }
 
-    let call = await stStxBtcTracking.getPendingRewardsMany(infoArray);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(100, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(200, 8);
-    call.result.expectList()[3].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[4].expectOk().expectUintWithDecimals(0, 8);
+    const rewards = stStxBtcTracking.getPendingRewardsMany(infoArray);
+    expect(listElement(rewards, 0)).toBeOk(uintWithDecimals(0, 8));
+    expect(listElement(rewards, 1)).toBeOk(uintWithDecimals(100, 8));
+    expect(listElement(rewards, 2)).toBeOk(uintWithDecimals(200, 8));
+    expect(listElement(rewards, 3)).toBeOk(uintWithDecimals(0, 8));
+    expect(listElement(rewards, 4)).toBeOk(uintWithDecimals(0, 8));
 
-    result = await stStxBtcTracking.claimPendingRewardsMany(
-      wallet_1,
-      infoArray
-    );
-    result.expectOk().expectList()[0].expectOk().expectUintWithDecimals(0, 8);
-    result.expectOk().expectList()[1].expectOk().expectUintWithDecimals(100, 8);
-    result.expectOk().expectList()[2].expectOk().expectUintWithDecimals(200, 8);
-    result.expectOk().expectList()[3].expectOk().expectUintWithDecimals(0, 8);
-    result.expectOk().expectList()[4].expectOk().expectUintWithDecimals(0, 8);
-  },
-});
+    const claimed = okValue(stStxBtcTracking.claimPendingRewardsMany(wallet_1, infoArray));
+    expect(listElement(claimed, 0)).toBeOk(uintWithDecimals(0, 8));
+    expect(listElement(claimed, 1)).toBeOk(uintWithDecimals(100, 8));
+    expect(listElement(claimed, 2)).toBeOk(uintWithDecimals(200, 8));
+    expect(listElement(claimed, 3)).toBeOk(uintWithDecimals(0, 8));
+    expect(listElement(claimed, 4)).toBeOk(uintWithDecimals(0, 8));
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: can not claim multiple times",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+  it("ststxbtc-tracking: can not claim multiple times", () => {
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 70000, deployer)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 20000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 10000, wallet_2)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      70000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      20000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      10000,
-      wallet_2.address
-    );
-    result.expectOk().expectBool(true);
-
-    let call = await stStxBtcTrackingData.getTotalSupply();
-    call.result.expectUintWithDecimals(100000);
+    expect(stStxBtcTrackingData.getTotalSupply()).toBeUint(100000 * 1_000_000);
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 1000);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 1000)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
-      { holder: wallet_1.address, position: wallet_1.address },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: wallet_2, position: wallet_2 },
+        { holder: wallet_1, position: wallet_1 },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals((70000 / 100000) * 1000, 8)),
+      Cl.ok(uintWithDecimals((20000 / 100000) * 1000, 8)),
+      Cl.ok(uintWithDecimals((10000 / 100000) * 1000, 8)),
+      Cl.ok(uintWithDecimals((20000 / 100000) * 1000, 8)),
     ]);
-    call.result
-      .expectList()[0]
-      .expectOk()
-      .expectUintWithDecimals((70000 / 100000) * 1000, 8);
-    call.result
-      .expectList()[1]
-      .expectOk()
-      .expectUintWithDecimals((20000 / 100000) * 1000, 8);
-    call.result
-      .expectList()[2]
-      .expectOk()
-      .expectUintWithDecimals((10000 / 100000) * 1000, 8);
-    call.result
-      .expectList()[3]
-      .expectOk()
-      .expectUintWithDecimals((20000 / 100000) * 1000, 8);
 
-    result = await stStxBtcTracking.claimPendingRewardsMany(wallet_1, [
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      { holder: wallet_2.address, position: wallet_2.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-    ]);
-    result
-      .expectOk()
-      .expectList()[0]
-      .expectOk()
-      .expectUintWithDecimals((70000 / 100000) * 1000, 8);
-    result
-      .expectOk()
-      .expectList()[1]
-      .expectOk()
-      .expectUintWithDecimals((20000 / 100000) * 1000, 8);
-    result
-      .expectOk()
-      .expectList()[2]
-      .expectOk()
-      .expectUintWithDecimals((10000 / 100000) * 1000, 8);
-    result.expectOk().expectList()[3].expectOk().expectUintWithDecimals(0, 8);
-  },
-});
-
-Clarinet.test({
-  name: "ststxbtc-tracking: add rewards multiple times",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
+    expect(
+      stStxBtcTracking.claimPendingRewardsMany(wallet_1, [
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: wallet_2, position: wallet_2 },
+        { holder: wallet_1, position: wallet_1 },
+      ]),
+    ).toBeOk(
+      Cl.list([
+        Cl.ok(uintWithDecimals((70000 / 100000) * 1000, 8)),
+        Cl.ok(uintWithDecimals((20000 / 100000) * 1000, 8)),
+        Cl.ok(uintWithDecimals((10000 / 100000) * 1000, 8)),
+        Cl.ok(uintWithDecimals(0, 8)),
+      ]),
     );
-    result.expectOk().expectBool(true);
+  });
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      7000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      2000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+  it("ststxbtc-tracking: add rewards multiple times", () => {
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
 
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
+
+    expect(stStxBtcToken.mintForProtocol(deployer, 7000, deployer)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 2000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, qualifiedName("position-mock"))).toBeOk(Cl.bool(true));
+
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
     // Refresh positions
-    result = await stStxBtcTracking.refreshPosition(
-      deployer,
-      deployer.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
-    result = await stStxBtcTracking.refreshPosition(
-      deployer,
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
+    expect(stStxBtcTracking.refreshPosition(deployer, deployer, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
+    expect(stStxBtcTracking.refreshPosition(deployer, wallet_1, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 1000);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 1000)).toBeOk(Cl.bool(true));
 
-    let call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      {
-        holder: deployer.address,
-        position: qualifiedName("position-mock"),
-      },
-      {
-        holder: wallet_1.address,
-        position: qualifiedName("position-mock"),
-      },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: deployer, position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(700, 8)),
+      Cl.ok(uintWithDecimals(200, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(10, 8)),
+      Cl.ok(uintWithDecimals(10, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(700, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(200, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[3].expectOk().expectUintWithDecimals(10, 8);
-    call.result.expectList()[4].expectOk().expectUintWithDecimals(10, 8);
 
     // Claim some rewards
-    result = await stStxBtcTracking.claimPendingRewardsMany(wallet_1, [
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: deployer.address,
-        position: qualifiedName("position-mock"),
-      },
-    ]);
-    result.expectOk().expectList()[0].expectOk().expectUintWithDecimals(200, 8);
-    result.expectOk().expectList()[1].expectOk().expectUintWithDecimals(10, 8);
+    expect(
+      stStxBtcTracking.claimPendingRewardsMany(wallet_1, [
+        { holder: wallet_1, position: wallet_1 },
+        { holder: deployer, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeOk(
+      Cl.list([
+        Cl.ok(uintWithDecimals(200, 8)),
+        Cl.ok(uintWithDecimals(10, 8)),
+      ]),
+    );
 
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      {
-        holder: deployer.address,
-        position: qualifiedName("position-mock"),
-      },
-      {
-        holder: wallet_1.address,
-        position: qualifiedName("position-mock"),
-      },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: deployer, position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(700, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(10, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(700, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[3].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[4].expectOk().expectUintWithDecimals(10, 8);
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 2000);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 2000)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: deployer.address, position: deployer.address },
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      {
-        holder: deployer.address,
-        position: qualifiedName("position-mock"),
-      },
-      {
-        holder: wallet_1.address,
-        position: qualifiedName("position-mock"),
-      },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: deployer, position: deployer },
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: deployer, position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(700 + 1400, 8)),
+      Cl.ok(uintWithDecimals(0 + 400, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0 + 20, 8)),
+      Cl.ok(uintWithDecimals(10 + 20, 8)),
     ]);
-    call.result
-      .expectList()[0]
-      .expectOk()
-      .expectUintWithDecimals(700 + 1400, 8);
-    call.result
-      .expectList()[1]
-      .expectOk()
-      .expectUintWithDecimals(0 + 400, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
-    call.result
-      .expectList()[3]
-      .expectOk()
-      .expectUintWithDecimals(0 + 20, 8);
-    call.result
-      .expectList()[4]
-      .expectOk()
-      .expectUintWithDecimals(10 + 20, 8);
-  },
-});
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: enable and disable supported position and check rewards",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("ststxbtc-tracking: enable and disable supported position and check rewards", () => {
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
 
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
-
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      2000,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 2000, qualifiedName("position-mock"))).toBeOk(Cl.bool(true));
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 1500);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 1500)).toBeOk(Cl.bool(true));
 
-    let call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(500, 8)),
+      Cl.ok(uintWithDecimals(1000, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(500, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(1000, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
 
     // Enable position
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(500, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(500, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
 
     // Update position
-    result = await stStxBtcTracking.refreshPosition(
-      deployer,
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
+    expect(stStxBtcTracking.refreshPosition(deployer, wallet_1, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
 
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(500, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(500, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 1500);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 1500)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      {
-        holder: wallet_1.address,
-        position: qualifiedName("position-mock"),
-      },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(500 + 500, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(50, 8)),
     ]);
-    call.result
-      .expectList()[0]
-      .expectOk()
-      .expectUintWithDecimals(500 + 500, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(50, 8);
 
     // Disable position
     // Must claim rewards from users position
-    result = await stStxBtcTracking.claimPendingRewards(
-      deployer,
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(50, 8);
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      false,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.claimPendingRewards(deployer, wallet_1, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(50, 8));
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        false,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      {
-        holder: wallet_1.address,
-        position: qualifiedName("position-mock"),
-      },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(500 + 500, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
     ]);
-    call.result
-      .expectList()[0]
-      .expectOk()
-      .expectUintWithDecimals(500 + 500, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
-  },
-});
+  });
 
-//-------------------------------------
-// Claims enabled
-//-------------------------------------
+  //-------------------------------------
+  // Claims enabled
+  //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-tracking: can enable and disable reward claims",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("ststxbtc-tracking: can enable and disable reward claims", () => {
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
 
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
+    expect(stStxBtcTracking.claimPendingRewards(deployer, deployer, deployer)).toBeOk(uintWithDecimals(0));
 
-    let result = await stStxBtcTracking.claimPendingRewards(
-      deployer,
-      deployer.address,
-      deployer.address
-    );
-    result.expectOk().expectUintWithDecimals(0);
+    expect(stStxBtcTracking.setClaimsEnabled(deployer, false)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcTracking.setClaimsEnabled(deployer, false);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.claimPendingRewards(deployer, deployer, deployer)).toBeErr(Cl.uint(10002002));
 
-    result = await stStxBtcTracking.claimPendingRewards(
-      deployer,
-      deployer.address,
-      deployer.address
-    );
-    result.expectErr().expectUint(10002002);
+    expect(stStxBtcTracking.setClaimsEnabled(deployer, true)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcTracking.setClaimsEnabled(deployer, true);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.claimPendingRewards(deployer, deployer, deployer)).toBeOk(uintWithDecimals(0));
+  });
 
-    result = await stStxBtcTracking.claimPendingRewards(
-      deployer,
-      deployer.address,
-      deployer.address
-    );
-    result.expectOk().expectUintWithDecimals(0);
-  },
-});
+  //-------------------------------------
+  // Admin
+  //-------------------------------------
 
-//-------------------------------------
-// Admin
-//-------------------------------------
+  it("ststxbtc-tracking: can withdraw tokens", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const sBtcToken = new SBtcToken(deployer);
 
-Clarinet.test({
-  name: "ststxbtc-tracking: can withdraw tokens",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(sBtcToken.protocolMint(deployer, 300, deployer)).toBeOk(Cl.bool(true));
 
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
+    expect(stStxBtcToken.mintForProtocol(deployer, 3000, deployer)).toBeOk(Cl.bool(true));
 
-    let result = await sBtcToken.protocolMint(deployer, 300, deployer.address);
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.getBalance(deployer)).toBeOk(uintWithDecimals(300, 8));
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      3000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.getBalance(qualifiedName("ststxbtc-tracking-v2"))).toBeOk(uintWithDecimals(0));
 
-    let call = await sBtcToken.getBalance(deployer.address);
-    call.result.expectOk().expectUintWithDecimals(300, 8);
+    expect(stStxBtcTracking.addRewards(deployer, 300)).toBeOk(Cl.bool(true));
 
-    call = await sBtcToken.getBalance(qualifiedName("ststxbtc-tracking-v2"));
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(sBtcToken.getBalance(deployer)).toBeOk(uintWithDecimals(0));
 
-    result = await stStxBtcTracking.addRewards(deployer, 300);
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.getBalance(qualifiedName("ststxbtc-tracking-v2"))).toBeOk(uintWithDecimals(300, 8));
 
-    call = await sBtcToken.getBalance(deployer.address);
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(stStxBtcTracking.withdrawTokens(deployer, deployer, 300)).toBeOk(Cl.bool(true));
 
-    call = await sBtcToken.getBalance(qualifiedName("ststxbtc-tracking-v2"));
-    call.result.expectOk().expectUintWithDecimals(300, 8);
+    expect(sBtcToken.getBalance(deployer)).toBeOk(uintWithDecimals(300, 8));
 
-    result = await stStxBtcTracking.withdrawTokens(
-      deployer,
-      deployer.address,
-      300
-    );
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.getBalance(qualifiedName("ststxbtc-tracking-v2"))).toBeOk(uintWithDecimals(0));
+  });
 
-    call = await sBtcToken.getBalance(deployer.address);
-    call.result.expectOk().expectUintWithDecimals(300, 8);
+  //-------------------------------------
+  // Access and Errors
+  //-------------------------------------
 
-    call = await sBtcToken.getBalance(qualifiedName("ststxbtc-tracking-v2"));
-    call.result.expectOk().expectUintWithDecimals(0);
-  },
-});
+  it("ststxbtc-tracking: unsupported position in refresh-position", () => {
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
 
-//-------------------------------------
-// Access and Errors
-//-------------------------------------
+    expect(stStxBtcTracking.refreshPosition(deployer, deployer, qualifiedName("position-mock"))).toBeErr(Cl.uint(10002001));
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: unsupported position in refresh-position",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("ststxbtc-tracking: set-total-supply and add-wallet can only be used by protocol", () => {
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
+    expect(stStxBtcTrackingData.setTotalSupply(wallet_1, 100)).toBeErr(Cl.uint(20003));
 
-    let result = await stStxBtcTracking.refreshPosition(
-      deployer,
-      deployer.address,
-      qualifiedName("position-mock")
-    );
-    result.expectErr().expectUint(10002001);
-  },
-});
+    expect(stStxBtcTracking.refreshWallet(wallet_1, wallet_1, 100)).toBeErr(Cl.uint(20003));
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: set-total-supply and add-wallet can only be used by protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("ststxbtc-tracking: admin functions can only be used by protocol", () => {
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
 
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+    expect(
+      stStxBtcTracking.setSupportedPositions(wallet_1, qualifiedName("position-mock"), true, wallet_1),
+    ).toBeErr(Cl.uint(20003));
 
-    let result = await stStxBtcTrackingData.setTotalSupply(wallet_1, 100);
-    result.expectErr().expectUint(20003);
+    expect(stStxBtcTracking.withdrawTokens(wallet_1, wallet_1, 10)).toBeErr(Cl.uint(20003));
 
-    result = await stStxBtcTracking.refreshWallet(
-      wallet_1,
-      wallet_1.address,
-      100
-    );
-    result.expectErr().expectUint(20003);
-  },
-});
+    expect(stStxBtcTracking.setClaimsEnabled(wallet_1, false)).toBeErr(Cl.uint(20003));
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: admin functions can only be used by protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("ststxbtc-tracking: can not update position if total above reserve", () => {
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
+    expect(stStxBtcToken.mintForProtocol(deployer, 200, qualifiedName("position-mock"))).toBeOk(Cl.bool(true));
 
-    let result = await stStxBtcTracking.setSupportedPositions(
-      wallet_1,
-      qualifiedName("position-mock"),
-      true,
-      wallet_1.address
-    );
-    result.expectErr().expectUint(20003);
-
-    result = await stStxBtcTracking.withdrawTokens(
-      wallet_1,
-      wallet_1.address,
-      10
-    );
-    result.expectErr().expectUint(20003);
-
-    result = await stStxBtcTracking.setClaimsEnabled(wallet_1, false);
-    result.expectErr().expectUint(20003);
-  },
-});
-
-Clarinet.test({
-  name: "ststxbtc-tracking: can not update position if total above reserve",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-
-    let result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      200,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
-
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
     // Refresh positions
-    result = await stStxBtcTracking.refreshPosition(
-      deployer,
-      deployer.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
-    result = await stStxBtcTracking.refreshPosition(
-      deployer,
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
-    result = await stStxBtcTracking.refreshPosition(
-      deployer,
-      wallet_2.address,
-      qualifiedName("position-mock")
-    );
-    result.expectErr().expectUint(10002003);
-  },
-});
+    expect(stStxBtcTracking.refreshPosition(deployer, deployer, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
+    expect(stStxBtcTracking.refreshPosition(deployer, wallet_1, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
+    expect(stStxBtcTracking.refreshPosition(deployer, wallet_2, qualifiedName("position-mock"))).toBeErr(Cl.uint(10002003));
+  });
 
-Clarinet.test({
-  name: "ststxbtc-tracking: can not set supported position to same active state",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("ststxbtc-tracking: can not set supported position to same active state", () => {
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
 
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        false,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeErr(Cl.uint(10002004));
 
-    let result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      false,
-      qualifiedName("position-mock")
-    );
-    result.expectErr().expectUint(10002004);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeErr(Cl.uint(10002004));
 
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectErr().expectUint(10002004);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        false,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
+  });
 
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      false,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
-  },
-});
+  it("ststxbtc-tracking: supported position can only be activated once", () => {
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-Clarinet.test({
-  name: "ststxbtc-tracking: supported position can only be activated once",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, qualifiedName("position-mock"))).toBeOk(Cl.bool(true));
 
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
-    let result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.refreshPosition(deployer, deployer, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
 
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        false,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcTracking.refreshPosition(
-      deployer,
-      deployer.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeErr(Cl.uint(10002005));
+  });
 
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      false,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+  //-------------------------------------
+  // Audit - Position whitelist
+  //-------------------------------------
 
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectErr().expectUint(10002005);
-  },
-});
+  it("ststxbtc-tracking: rewards if position added / removed from whitelist", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const sBtcToken = new SBtcToken(deployer);
 
-//-------------------------------------
-// Audit - Position whitelist
-//-------------------------------------
-
-Clarinet.test({
-  name: "ststxbtc-tracking: rewards if position added / removed from whitelist",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
-
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
     // Mint
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      2000,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 2000, qualifiedName("position-mock"))).toBeOk(Cl.bool(true));
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 300);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 300)).toBeOk(Cl.bool(true));
 
     // Rewards
-    let call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(100, 8)),
+      Cl.ok(uintWithDecimals(200, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(100, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(200, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
 
     //
     // Add to whitelist
     //
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      true,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        true,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
     // Update position
-    result = await stStxBtcTracking.refreshPosition(
-      deployer,
-      wallet_1.address,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectUintWithDecimals(100);
+    expect(stStxBtcTracking.refreshPosition(deployer, wallet_1, qualifiedName("position-mock"))).toBeOk(uintWithDecimals(100));
 
     // Rewards
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(100, 8)),
+      Cl.ok(uintWithDecimals(0, 8)), // Auto claimed rewards
+      Cl.ok(uintWithDecimals(0, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(100, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8); // Auto claimed rewards
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(0, 8);
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 300);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 300)).toBeOk(Cl.bool(true));
 
     // Rewards
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(200, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(10, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(200, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(10, 8);
 
     //
     // Remove whitelist
     //
-    result = await stStxBtcTracking.setSupportedPositions(
-      deployer,
-      qualifiedName("position-mock"),
-      false,
-      qualifiedName("position-mock")
-    );
-    result.expectOk().expectBool(true);
+    expect(
+      stStxBtcTracking.setSupportedPositions(
+        deployer,
+        qualifiedName("position-mock"),
+        false,
+        qualifiedName("position-mock"),
+      ),
+    ).toBeOk(Cl.bool(true));
 
     // Rewards
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(200, 8)),
+      Cl.ok(uintWithDecimals(0, 8)),
+      Cl.ok(uintWithDecimals(10, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(200, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(0, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(10, 8);
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 300);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 300)).toBeOk(Cl.bool(true));
 
     // Rewards
-    call = await stStxBtcTracking.getPendingRewardsMany([
-      { holder: wallet_1.address, position: wallet_1.address },
-      {
-        holder: qualifiedName("position-mock"),
-        position: qualifiedName("position-mock"),
-      },
-      { holder: wallet_1.address, position: qualifiedName("position-mock") },
+    expect(
+      stStxBtcTracking.getPendingRewardsMany([
+        { holder: wallet_1, position: wallet_1 },
+        { holder: qualifiedName("position-mock"), position: qualifiedName("position-mock") },
+        { holder: wallet_1, position: qualifiedName("position-mock") },
+      ]),
+    ).toBeList([
+      Cl.ok(uintWithDecimals(300, 8)),
+      Cl.ok(uintWithDecimals(200, 8)),
+      Cl.ok(uintWithDecimals(10, 8)),
     ]);
-    call.result.expectList()[0].expectOk().expectUintWithDecimals(300, 8);
-    call.result.expectList()[1].expectOk().expectUintWithDecimals(200, 8);
-    call.result.expectList()[2].expectOk().expectUintWithDecimals(10, 8);
-  },
-});
+  });
 
-//-------------------------------------
-// Audit - Double rewards
-//-------------------------------------
+  //-------------------------------------
+  // Audit - Double rewards
+  //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-tracking: correctly save rewards",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+  it("ststxbtc-tracking: correctly save rewards", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
+    const sBtcToken = new SBtcToken(deployer);
 
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
-
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
     // Mint
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      2000,
-      wallet_2.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Add rewards
-    result = await stStxBtcTracking.addRewards(deployer, 300);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTracking.addRewards(deployer, 300)).toBeOk(Cl.bool(true));
 
-    let call = stStxBtcTracking.getPendingRewards(wallet_1.address, wallet_1.address)
-    call.result.expectOk().expectUintWithDecimals(100, 8);
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals(100, 8));
 
-    result = await stStxBtcTracking.savePendingRewards(deployer, wallet_1.address, wallet_1.address);
-    result.expectOk().expectUintWithDecimals(100, 8);
+    expect(stStxBtcTracking.savePendingRewards(deployer, wallet_1, wallet_1)).toBeOk(uintWithDecimals(100, 8));
 
-    call = stStxBtcTracking.getPendingRewards(wallet_1.address, wallet_1.address)
-    call.result.expectOk().expectUintWithDecimals(100, 8);
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals(100, 8));
 
-    call = stStxBtcTracking.getSavedRewards(wallet_1.address, wallet_1.address);
-    call.result.expectUintWithDecimals(100, 8);
+    expect(stStxBtcTracking.getSavedRewards(wallet_1, wallet_1)).toBeUint(uintWithDecimals(100, 8).value);
 
-    result = await stStxBtcTracking.savePendingRewards(deployer, wallet_1.address, wallet_1.address);
-    result.expectOk().expectUintWithDecimals(0, 8);
+    expect(stStxBtcTracking.savePendingRewards(deployer, wallet_1, wallet_1)).toBeOk(uintWithDecimals(0, 8));
 
-    call = stStxBtcTracking.getPendingRewards(wallet_1.address, wallet_1.address)
-    call.result.expectOk().expectUintWithDecimals(100, 8)
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals(100, 8));
 
-    call = stStxBtcTracking.getSavedRewards(wallet_1.address, wallet_1.address);
-    call.result.expectUintWithDecimals(100, 8);
+    expect(stStxBtcTracking.getSavedRewards(wallet_1, wallet_1)).toBeUint(uintWithDecimals(100, 8).value);
 
-     // Add rewards
-     result = await stStxBtcTracking.addRewards(deployer, 600);
-     result.expectOk().expectBool(true);
- 
-    call = stStxBtcTracking.getPendingRewards(wallet_1.address, wallet_1.address)
-     call.result.expectOk().expectUintWithDecimals(300, 8);
- 
-     result = await stStxBtcTracking.savePendingRewards(deployer, wallet_1.address, wallet_1.address);
-     result.expectOk().expectUintWithDecimals(300, 8);
- 
-     call = stStxBtcTracking.getPendingRewards(wallet_1.address, wallet_1.address)
-     call.result.expectOk().expectUintWithDecimals(300, 8);
- 
-     call = stStxBtcTracking.getSavedRewards(wallet_1.address, wallet_1.address);
-     call.result.expectUintWithDecimals(300, 8);
- 
-     result = await stStxBtcTracking.savePendingRewards(deployer, wallet_1.address, wallet_1.address);
-     result.expectOk().expectUintWithDecimals(0, 8);
- 
-     call = stStxBtcTracking.getPendingRewards(wallet_1.address, wallet_1.address)
-     call.result.expectOk().expectUintWithDecimals(300, 8)
- 
-     call = stStxBtcTracking.getSavedRewards(wallet_1.address, wallet_1.address);
-     call.result.expectUintWithDecimals(300, 8);
-  },
+    // Add rewards
+    expect(stStxBtcTracking.addRewards(deployer, 600)).toBeOk(Cl.bool(true));
+
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals(300, 8));
+
+    expect(stStxBtcTracking.savePendingRewards(deployer, wallet_1, wallet_1)).toBeOk(uintWithDecimals(300, 8));
+
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals(300, 8));
+
+    expect(stStxBtcTracking.getSavedRewards(wallet_1, wallet_1)).toBeUint(uintWithDecimals(300, 8).value);
+
+    expect(stStxBtcTracking.savePendingRewards(deployer, wallet_1, wallet_1)).toBeOk(uintWithDecimals(0, 8));
+
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals(300, 8));
+
+    expect(stStxBtcTracking.getSavedRewards(wallet_1, wallet_1)).toBeUint(uintWithDecimals(300, 8).value);
+  });
 });

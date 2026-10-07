@@ -1,219 +1,178 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName, REWARD_CYCLE_LENGTH } from '../wrappers/tests-utils.ts';
-qualifiedName("")
+import { describe, expect, it } from "vitest";
+import { tx } from "@hirosystems/clarinet-sdk";
+import { Cl, ClarityType } from "@stacks/transactions";
 
-import { CoreV1 as Core } from '../wrappers/stacking-dao-core-helpers.ts';
-import { GenesisMinter, GenesisNFT } from '../wrappers/genesis-minter-helpers.ts';
+import { qualifiedName, uintWithDecimals } from "../wrappers/tests-utils";
+import { CoreV1 as Core } from "../wrappers/stacking-dao-core-helpers";
+import { GenesisMinter, GenesisNFT } from "../wrappers/genesis-minter-helpers";
 
-Clarinet.test({
-  name: "genesis-nft: airdrop OG / Diamond / Gold",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
+const wallet_3 = accounts.get("wallet_3")!;
 
-    let genesisMinter = new GenesisMinter(chain, deployer);
-    let genesisNft = new GenesisNFT(chain, deployer);
-    let core = new Core(chain, deployer);
+describe("genesis-nft", () => {
+  it("genesis-nft: airdrop OG / Diamond / Gold", () => {
+    const genesisMinter = new GenesisMinter(deployer);
+    const genesisNft = new GenesisNFT(deployer);
+    const core = new Core(deployer);
 
     // Mint some stSTX
-    let result = await core.deposit(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(core.deposit(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
     // Set cycle block to check at block 10
-    result = await genesisMinter.setCycleEndBlock(10);
-    result.expectOk();
+    expect(genesisMinter.setCycleEndBlock(10)).toHaveClarityType(ClarityType.ResponseOk);
 
-    result = await genesisMinter.getCycleEndBlock();
-    result.result.expectUint(10);
+    expect(genesisMinter.getCycleEndBlock()).toBeUint(10);
 
-    chain.mineEmptyBlock(10);
+    simnet.mineEmptyBlocks(10);
 
-    let call:any = genesisMinter.canClaim(wallet_1);
-    call.result.expectBool(true);
+    expect(genesisMinter.canClaim(wallet_1)).toBeBool(true);
 
     // We are past block 10 now, airdrop NFT
-    call = genesisMinter.airdrop(wallet_1, 1);
-    call.expectOk().expectBool(true);
+    expect(genesisMinter.airdrop(wallet_1, 1)).toBeOk(Cl.bool(true));
 
     // Cannot airdrop to the same address again
-    call = genesisMinter.airdrop(wallet_1, 1);
-    call.expectErr().expectUint(1103);
+    expect(genesisMinter.airdrop(wallet_1, 1)).toBeErr(Cl.uint(1103));
 
     // Check if we own the NFT
-    result = await genesisNft.getOwner(0);
-    result.result.expectOk().expectSome(wallet_1.address);
+    expect(genesisNft.getOwner(0)).toBeOk(Cl.some(Cl.principal(wallet_1)));
 
-    result = await genesisNft.getGenesisType(0);
-    result.result.expectUint(1);
-  }
-});
+    expect(genesisNft.getGenesisType(0)).toBeUint(1);
+  });
 
-Clarinet.test({
-  name: "genesis-nft: airdrop-many",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-    let wallet_3 = accounts.get("wallet_3")!;
+  it("genesis-nft: airdrop-many", () => {
+    const genesisMinter = new GenesisMinter(deployer);
+    const genesisNft = new GenesisNFT(deployer);
+    const core = new Core(deployer);
 
-    let genesisMinter = new GenesisMinter(chain, deployer);
-    let genesisNft = new GenesisNFT(chain, deployer);
-    let core = new Core(chain, deployer);
-
-    // Mint some stSTX
-    let result = await core.deposit(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
-    result = await core.deposit(wallet_2, 1000);
-    result = await core.deposit(wallet_3, 1000);
+    // Mint some stSTX — bundle into one block so all deposits land before cycle-end-block
+    const depositArgs = [
+      Cl.principal(qualifiedName("reserve-v1")),
+      Cl.uint(1000 * 1_000_000),
+      Cl.none(),
+    ];
+    const [d1, d2, d3] = simnet.mineBlock([
+      tx.callPublicFn("stacking-dao-core-v1", "deposit", depositArgs, wallet_1),
+      tx.callPublicFn("stacking-dao-core-v1", "deposit", depositArgs, wallet_2),
+      tx.callPublicFn("stacking-dao-core-v1", "deposit", depositArgs, wallet_3),
+    ]);
+    expect(d1.result).toBeOk(uintWithDecimals(1000));
+    expect(d2.result).toBeOk(uintWithDecimals(1000));
+    expect(d3.result).toBeOk(uintWithDecimals(1000));
 
     // Set cycle block to check at block 10
-    result = await genesisMinter.setCycleEndBlock(10);
-    result.expectOk();
+    expect(genesisMinter.setCycleEndBlock(10)).toHaveClarityType(ClarityType.ResponseOk);
 
-    result = await genesisMinter.getCycleEndBlock();
-    result.result.expectUint(10);
+    expect(genesisMinter.getCycleEndBlock()).toBeUint(10);
 
-    chain.mineEmptyBlock(10);
+    simnet.mineEmptyBlocks(10);
 
-    let call:any = genesisMinter.canClaim(wallet_1);
-    call.result.expectBool(true);
-    call = genesisMinter.canClaim(wallet_2);
-    call.result.expectBool(true);
-    call = genesisMinter.canClaim(wallet_3);
-    call.result.expectBool(true);
+    expect(genesisMinter.canClaim(wallet_1)).toBeBool(true);
+    expect(genesisMinter.canClaim(wallet_2)).toBeBool(true);
+    expect(genesisMinter.canClaim(wallet_3)).toBeBool(true);
 
     // We are past block 10 now, airdrop NFT
-    call = genesisMinter.airdropMany([
-      { 'recipient': wallet_1.address, 'type': 1 },
-      { 'recipient': wallet_2.address, 'type': 1 },
-      { 'recipient': wallet_3.address, 'type': 1 }
-    ]);
-    call.expectOk().expectList()[0].expectOk().expectBool(true);
-    call.expectOk().expectList()[1].expectOk().expectBool(true);
-    call.expectOk().expectList()[2].expectOk().expectBool(true);
+    expect(
+      genesisMinter.airdropMany([
+        { recipient: wallet_1, type: 1 },
+        { recipient: wallet_2, type: 1 },
+        { recipient: wallet_3, type: 1 },
+      ]),
+    ).toBeOk(
+      Cl.list([
+        Cl.ok(Cl.bool(true)),
+        Cl.ok(Cl.bool(true)),
+        Cl.ok(Cl.bool(true)),
+      ]),
+    );
 
-    call = genesisMinter.airdropMany([
-      { 'recipient': wallet_1.address, 'type': 1 },
-      { 'recipient': wallet_2.address, 'type': 1 },
-      { 'recipient': wallet_3.address, 'type': 1 }
-    ]);
-    call.expectOk().expectList()[0].expectErr().expectUint(1103);
-    call.expectOk().expectList()[1].expectErr().expectUint(1103);
-    call.expectOk().expectList()[2].expectErr().expectUint(1103);
+    expect(
+      genesisMinter.airdropMany([
+        { recipient: wallet_1, type: 1 },
+        { recipient: wallet_2, type: 1 },
+        { recipient: wallet_3, type: 1 },
+      ]),
+    ).toBeOk(
+      Cl.list([
+        Cl.error(Cl.uint(1103)),
+        Cl.error(Cl.uint(1103)),
+        Cl.error(Cl.uint(1103)),
+      ]),
+    );
 
     // Cannot airdrop to the same address again
-    call = genesisMinter.airdrop(wallet_1, 1);
-    call.expectErr().expectUint(1103);
+    expect(genesisMinter.airdrop(wallet_1, 1)).toBeErr(Cl.uint(1103));
 
     // Check if we own the NFT
-    result = await genesisNft.getOwner(0);
-    result.result.expectOk().expectSome(wallet_1.address);
+    expect(genesisNft.getOwner(0)).toBeOk(Cl.some(Cl.principal(wallet_1)));
 
-    result = await genesisNft.getGenesisType(0);
-    result.result.expectUint(1);
+    expect(genesisNft.getGenesisType(0)).toBeUint(1);
 
-    result = await genesisNft.getOwner(1);
-    result.result.expectOk().expectSome(wallet_2.address);
+    expect(genesisNft.getOwner(1)).toBeOk(Cl.some(Cl.principal(wallet_2)));
 
-    result = await genesisNft.getOwner(2);
-    result.result.expectOk().expectSome(wallet_3.address);
-  }
-});
+    expect(genesisNft.getOwner(2)).toBeOk(Cl.some(Cl.principal(wallet_3)));
+  });
 
-Clarinet.test({
-  name: "genesis-nft: mint as a user",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let genesisMinter = new GenesisMinter(chain, deployer);
-    let genesisNft = new GenesisNFT(chain, deployer);
-    let core = new Core(chain, deployer);
+  it("genesis-nft: mint as a user", () => {
+    const genesisMinter = new GenesisMinter(deployer);
+    const core = new Core(deployer);
 
     // Mint some stSTX
-    let result = await core.deposit(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(core.deposit(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
     // Set cycle block to check at block 10
-    result = await genesisMinter.setCycleEndBlock(10);
-    result.expectOk();
+    expect(genesisMinter.setCycleEndBlock(10)).toHaveClarityType(ClarityType.ResponseOk);
 
-    chain.mineEmptyBlock(10);
+    simnet.mineEmptyBlocks(10);
 
-    result = await genesisMinter.claim(deployer); // fails
-    result.expectErr().expectUint(1102);
+    expect(genesisMinter.claim(deployer)).toBeErr(Cl.uint(1102)); // fails
 
-    result = await genesisMinter.claim(wallet_1); // succeeds
-    result.expectOk().expectBool(true);
-  }
-});
+    expect(genesisMinter.claim(wallet_1)).toBeOk(Cl.bool(true)); // succeeds
+  });
 
-Clarinet.test({
-  name: "genesis-nft: transfer NFTs",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-
-    let genesisMinter = new GenesisMinter(chain, deployer);
-    let genesisNft = new GenesisNFT(chain, deployer);
-    let core = new Core(chain, deployer);
+  it("genesis-nft: transfer NFTs", () => {
+    const genesisMinter = new GenesisMinter(deployer);
+    const genesisNft = new GenesisNFT(deployer);
+    const core = new Core(deployer);
 
     // Mint some stSTX
-    let result = await core.deposit(wallet_1, 1000);
-    result = await core.deposit(wallet_2, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    core.deposit(wallet_1, 1000);
+    expect(core.deposit(wallet_2, 1000)).toBeOk(uintWithDecimals(1000));
 
     // Set cycle block to check at block 10
-    result = await genesisMinter.setCycleEndBlock(10);
-    result.expectOk();
+    expect(genesisMinter.setCycleEndBlock(10)).toHaveClarityType(ClarityType.ResponseOk);
 
-    chain.mineEmptyBlock(10);
+    simnet.mineEmptyBlocks(10);
 
-    result = await genesisMinter.claim(wallet_1); // succeeds
-    result.expectOk().expectBool(true);
-    result = await genesisMinter.claim(wallet_2);
-    result.expectOk().expectBool(true);
+    expect(genesisMinter.claim(wallet_1)).toBeOk(Cl.bool(true)); // succeeds
+    expect(genesisMinter.claim(wallet_2)).toBeOk(Cl.bool(true));
 
-    result = await genesisNft.transfer(0, wallet_1, wallet_2);
-    result.expectOk().expectBool(true);
-    result = await genesisNft.getOwner(0);
-    result.result.expectOk().expectSome(wallet_2.address);
+    expect(genesisNft.transfer(0, wallet_1, wallet_2)).toBeOk(Cl.bool(true));
+    expect(genesisNft.getOwner(0)).toBeOk(Cl.some(Cl.principal(wallet_2)));
 
-    result = await genesisNft.transfer(0, wallet_1, wallet_2);
-    result.expectErr().expectUint(1);
+    expect(genesisNft.transfer(0, wallet_1, wallet_2)).toBeErr(Cl.uint(1));
 
-    result = await genesisNft.transfer(1, wallet_2, wallet_1);
-    result.expectOk().expectBool(true);
-  }
-});
+    expect(genesisNft.transfer(1, wallet_2, wallet_1)).toBeOk(Cl.bool(true));
+  });
 
-Clarinet.test({
-  name: "genesis-nft: get NFT URI",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let genesisMinter = new GenesisMinter(chain, deployer);
-    let genesisNft = new GenesisNFT(chain, deployer);
-    let core = new Core(chain, deployer);
+  it("genesis-nft: get NFT URI", () => {
+    const genesisMinter = new GenesisMinter(deployer);
+    const genesisNft = new GenesisNFT(deployer);
+    const core = new Core(deployer);
 
     // Mint some stSTX
-    let result = await core.deposit(wallet_1, 1000);
-    result.expectOk().expectUintWithDecimals(1000);
+    expect(core.deposit(wallet_1, 1000)).toBeOk(uintWithDecimals(1000));
 
     // Set cycle block to check at block 10
-    result = await genesisMinter.setCycleEndBlock(10);
-    result.expectOk();
+    expect(genesisMinter.setCycleEndBlock(10)).toHaveClarityType(ClarityType.ResponseOk);
 
-    chain.mineEmptyBlock(10);
+    simnet.mineEmptyBlocks(10);
 
-    result = await genesisMinter.claim(wallet_1); // succeeds
-    result.expectOk().expectBool(true);
+    expect(genesisMinter.claim(wallet_1)).toBeOk(Cl.bool(true)); // succeeds
 
-    result = await genesisNft.setBaseTokenUri('ar://some-url');
-    result.expectOk().expectBool(true);
-    result = await genesisNft.getTokenUri(0);
-    result.result.expectOk().expectSome("ar://some-url.json");
-  }
+    expect(genesisNft.setBaseTokenUri("ar://some-url")).toBeOk(Cl.bool(true));
+    expect(genesisNft.getTokenUri(0)).toBeOk(Cl.some(Cl.stringAscii("ar://some-url.json")));
+  });
 });

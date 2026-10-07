@@ -1,568 +1,388 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
+import { describe, expect, it } from "vitest";
+import { Cl, ClarityType } from "@stacks/transactions";
 
-import { Rewards } from "../wrappers/rewards-helpers.ts";
-import { Reserve } from "../wrappers/reserve-helpers.ts";
-import { DataPools } from "../wrappers/data-pools-helpers.ts";
-import { CoreV1 } from "../wrappers/stacking-dao-core-helpers.ts";
-import { SBtcToken } from "../wrappers/sbtc-token-helpers.ts";
-import { StStxBtcTokenV1, StStxBtcToken } from "../wrappers/ststxbtc-token-helpers.ts";
-import { StStxBtcTracking } from "../wrappers/ststxbtc-tracking-helpers.ts";
+import {
+  mineEmptyBlockUntil,
+  okValue,
+  qualifiedName,
+  tupleField,
+  uintWithDecimals,
+} from "../wrappers/tests-utils";
+import { Rewards } from "../wrappers/rewards-helpers";
+import { Reserve } from "../wrappers/reserve-helpers";
+import { DataPools } from "../wrappers/data-pools-helpers";
+import { CoreV1 } from "../wrappers/stacking-dao-core-helpers";
+import { SBtcToken } from "../wrappers/sbtc-token-helpers";
+import { StStxBtcTokenV1, StStxBtcToken } from "../wrappers/ststxbtc-token-helpers";
+import { StStxBtcTracking } from "../wrappers/ststxbtc-tracking-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
 
 //-------------------------------------
 // Core
 //-------------------------------------
 
-Clarinet.test({
-  name: "rewards-v4: rewards are split between ststxbtc-tracking and ststxbtc-tracking-v2",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-
-    let rewards = new Rewards(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcTokenV1 = new StStxBtcTokenV1(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
+describe("rewards", () => {
+  it("rewards-v4: rewards are split between ststxbtc-tracking and ststxbtc-tracking-v2", () => {
+    const rewards = new Rewards(deployer);
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcTokenV1 = new StStxBtcTokenV1(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTracking = new StStxBtcTracking(deployer);
 
     // Mint sBTC tokens for rewards
-    let result = await sBtcToken.protocolMint(deployer, 1000, deployer.address);
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.protocolMint(deployer, 1000, deployer)).toBeOk(Cl.bool(true));
 
     // Mint stStxBtcTokenV1 tokens to wallet_1
-    result = await stStxBtcTokenV1.mintForProtocol(deployer, 1000, wallet_1.address);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTokenV1.mintForProtocol(deployer, 1000, wallet_1)).toBeOk(Cl.bool(true));
 
     // Mint stStxBtcTokenV1 tokens to wallet_2
-    result = await stStxBtcTokenV1.mintForProtocol(deployer, 2000, wallet_2.address);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcTokenV1.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Mint stStxBtcToken tokens to wallet_2
-    result = await stStxBtcToken.mintForProtocol(deployer, 2000, wallet_2.address);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 2000, wallet_2)).toBeOk(Cl.bool(true));
 
     // Add rewards
-    result = await rewards.addRewardsSBtc(deployer, qualifiedName("stacking-pool-v1"), 500);
-    result.expectOk().expectBool(true);
+    expect(rewards.addRewardsSBtc(deployer, qualifiedName("stacking-pool-v1"), 500)).toBeOk(Cl.bool(true));
 
     // Go to end of next cycle
-    await chain.mineEmptyBlockUntil(21 * 2 + 1);
+    mineEmptyBlockUntil(21 * 2 + 1);
 
     // Process all rewards
-    result = await rewards.processRewards(deployer, 0);
-    result.expectOk().expectTuple()["total-intervals"].expectUint(7);
-    result.expectOk().expectTuple()["past-intervals"].expectUint(7);
-    result.expectOk().expectTuple()["commission-stx"].expectUintWithDecimals(0);
-    result.expectOk().expectTuple()["protocol-stx"].expectUintWithDecimals(0);
-    result.expectOk().expectTuple()["commission-sbtc"].expectUintWithDecimals(25);
-    result.expectOk().expectTuple()["protocol-sbtc"].expectUintWithDecimals(475);
+    let processed = okValue(rewards.processRewards(deployer, 0));
+    expect(tupleField(processed, "total-intervals")).toBeUint(7);
+    expect(tupleField(processed, "past-intervals")).toBeUint(7);
+    expect(tupleField(processed, "commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(processed, "protocol-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(processed, "commission-sbtc")).toBeUint(uintWithDecimals(25).value);
+    expect(tupleField(processed, "protocol-sbtc")).toBeUint(uintWithDecimals(475).value);
 
     // Check rewards in tracking contracts
-    let call = await chain.callReadOnlyFn(
+    let call = simnet.callReadOnlyFn(
       "ststxbtc-tracking",
       "get-pending-rewards",
-      [
-        types.principal(wallet_1.address),
-        types.principal(wallet_1.address)
-      ],
-      deployer.address
-    )
-    call.result.expectOk().expectUintWithDecimals(95);
+      [Cl.principal(wallet_1), Cl.principal(wallet_1)],
+      deployer,
+    ).result;
+    expect(call).toBeOk(uintWithDecimals(95));
 
-    call = await chain.callReadOnlyFn(
+    call = simnet.callReadOnlyFn(
       "ststxbtc-tracking",
       "get-pending-rewards",
-      [
-        types.principal(wallet_2.address),
-        types.principal(wallet_2.address)
-      ],
-      deployer.address
-    )
-    call.result.expectOk().expectUintWithDecimals(190);
+      [Cl.principal(wallet_2), Cl.principal(wallet_2)],
+      deployer,
+    ).result;
+    expect(call).toBeOk(uintWithDecimals(190));
 
-    call = await stStxBtcTracking.getPendingRewards(wallet_1.address, wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0); 
-    call = await stStxBtcTracking.getPendingRewards(wallet_2.address, wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(190); 
+    expect(stStxBtcTracking.getPendingRewards(wallet_1, wallet_1)).toBeOk(uintWithDecimals(0));
+    expect(stStxBtcTracking.getPendingRewards(wallet_2, wallet_2)).toBeOk(uintWithDecimals(190));
 
     // Claim rewards
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking",
-        "claim-pending-rewards",
-        [
-          types.principal(wallet_1.address),
-          types.principal(wallet_1.address)
-        ],
-        wallet_1.address
-      )
-    ]);
-    result = block.receipts[0].result;
-    result.expectOk().expectUintWithDecimals(95);
+    let claim = simnet.callPublicFn(
+      "ststxbtc-tracking",
+      "claim-pending-rewards",
+      [Cl.principal(wallet_1), Cl.principal(wallet_1)],
+      wallet_1,
+    ).result;
+    expect(claim).toBeOk(uintWithDecimals(95));
 
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking",
-        "claim-pending-rewards",
-        [
-          types.principal(wallet_2.address),
-          types.principal(wallet_2.address)
-        ],
-        wallet_2.address
-      )
-    ]);
-    result = block.receipts[0].result;
-    result.expectOk().expectUintWithDecimals(190);
+    claim = simnet.callPublicFn(
+      "ststxbtc-tracking",
+      "claim-pending-rewards",
+      [Cl.principal(wallet_2), Cl.principal(wallet_2)],
+      wallet_2,
+    ).result;
+    expect(claim).toBeOk(uintWithDecimals(190));
 
-    result = await stStxBtcTracking.claimPendingRewards(wallet_1, wallet_1.address, wallet_1.address);
-    result.expectOk().expectUintWithDecimals(0);
+    expect(stStxBtcTracking.claimPendingRewards(wallet_1, wallet_1, wallet_1)).toBeOk(uintWithDecimals(0));
 
-    result = await stStxBtcTracking.claimPendingRewards(wallet_2, wallet_2.address, wallet_2.address);
-    result.expectOk().expectUintWithDecimals(190);
+    expect(stStxBtcTracking.claimPendingRewards(wallet_2, wallet_2, wallet_2)).toBeOk(uintWithDecimals(190));
 
     // Verify final balances
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(95);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(95));
 
-    call = await sBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(380);
-  },
-});
+    expect(sBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(380));
+  });
 
-Clarinet.test({
-  name: "rewards-v4: add rewards and process",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("rewards-v4: add rewards and process", () => {
+    const rewards = new Rewards(deployer);
+    const reserve = new Reserve(deployer);
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-    let rewards = new Rewards(chain, deployer);
-    let reserve = new Reserve(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, deployer)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    let ststx = rewards.getCycleRewardsStStx(0);
+    expect(tupleField(ststx, "total-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "protocol-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "processed-commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "processed-protocol-stx")).toBeUint(uintWithDecimals(0).value);
 
-    let call = await rewards.getCycleRewardsStStx(0);
-    call.result.expectTuple()["total-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-commission-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-protocol-stx"].expectUintWithDecimals(0);
+    let ststxbtc = rewards.getCycleRewardsStStxBtc(0);
+    expect(tupleField(ststxbtc, "total-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "commission-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "protocol-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "processed-commission-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "processed-protocol-sbtc")).toBeUint(uintWithDecimals(0).value);
 
-    call = await rewards.getCycleRewardsStStxBtc(0);
-    call.result.expectTuple()["total-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-commission-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-protocol-sbtc"].expectUintWithDecimals(0);
+    expect(rewards.addRewards(deployer, qualifiedName("stacking-pool-v1"), 100)).toBeOk(Cl.bool(true));
+    expect(rewards.addRewardsSBtc(deployer, qualifiedName("stacking-pool-v1"), 10)).toBeOk(Cl.bool(true));
 
-    result = await rewards.addRewards(
-      deployer,
-      qualifiedName("stacking-pool-v1"),
-      100
-    );
-    result.expectOk().expectBool(true);
-    result = await rewards.addRewardsSBtc(
-      deployer,
-      qualifiedName("stacking-pool-v1"),
-      10
-    );
-    result.expectOk().expectBool(true);
+    ststx = rewards.getCycleRewardsStStx(0);
+    expect(tupleField(ststx, "total-stx")).toBeUint(uintWithDecimals(100).value);
+    expect(tupleField(ststx, "commission-stx")).toBeUint(uintWithDecimals(5).value);
+    expect(tupleField(ststx, "protocol-stx")).toBeUint(uintWithDecimals(95).value);
+    expect(tupleField(ststx, "processed-commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "processed-protocol-stx")).toBeUint(uintWithDecimals(0).value);
 
-    call = await rewards.getCycleRewardsStStx(0);
-    call.result.expectTuple()["total-stx"].expectUintWithDecimals(100);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(5);
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(95);
-    call.result.expectTuple()["processed-commission-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-protocol-stx"].expectUintWithDecimals(0);
-
-    call = await rewards.getCycleRewardsStStxBtc(0);
-    call.result.expectTuple()["total-sbtc"].expectUintWithDecimals(10);
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0.5);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(9.5);
-    call.result.expectTuple()["processed-commission-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-protocol-sbtc"].expectUintWithDecimals(0);
+    ststxbtc = rewards.getCycleRewardsStStxBtc(0);
+    expect(tupleField(ststxbtc, "total-sbtc")).toBeUint(uintWithDecimals(10).value);
+    expect(tupleField(ststxbtc, "commission-sbtc")).toBeUint(uintWithDecimals(0.5).value);
+    expect(tupleField(ststxbtc, "protocol-sbtc")).toBeUint(uintWithDecimals(9.5).value);
+    expect(tupleField(ststxbtc, "processed-commission-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "processed-protocol-sbtc")).toBeUint(uintWithDecimals(0).value);
 
     // Go to end of cycle
-    await chain.mineEmptyBlockUntil(21);
+    mineEmptyBlockUntil(21);
 
-    call = await rewards.shouldProcessRewards(0);
-    call.result.expectTuple()["total-intervals"].expectUint(7);
-    call.result.expectTuple()["past-intervals"].expectUint(0);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(0);
+    let should = rewards.shouldProcessRewards(0);
+    expect(tupleField(should, "total-intervals")).toBeUint(7);
+    expect(tupleField(should, "past-intervals")).toBeUint(0);
+    expect(tupleField(should, "commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(should, "protocol-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(should, "commission-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(should, "protocol-sbtc")).toBeUint(uintWithDecimals(0).value);
 
     // Advance first interval
-    await chain.mineEmptyBlockUntil(21 + 4);
+    mineEmptyBlockUntil(21 + 4);
 
-    call = await rewards.shouldProcessRewards(0);
-    call.result.expectTuple()["total-intervals"].expectUint(7);
-    call.result.expectTuple()["past-intervals"].expectUint(1);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(0.714285); // 5/7
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(13.571428); // 95/7
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0.071428);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(1.357142);
+    should = rewards.shouldProcessRewards(0);
+    expect(tupleField(should, "total-intervals")).toBeUint(7);
+    expect(tupleField(should, "past-intervals")).toBeUint(1);
+    expect(tupleField(should, "commission-stx")).toBeUint(uintWithDecimals(0.714285).value);
+    expect(tupleField(should, "protocol-stx")).toBeUint(uintWithDecimals(13.571428).value);
+    expect(tupleField(should, "commission-sbtc")).toBeUint(uintWithDecimals(0.071428).value);
+    expect(tupleField(should, "protocol-sbtc")).toBeUint(uintWithDecimals(1.357142).value);
 
-    result = await rewards.processRewards(deployer, 0);
-    result.expectOk().expectTuple()["total-intervals"].expectUint(7);
-    result.expectOk().expectTuple()["past-intervals"].expectUint(1);
+    let processed = okValue(rewards.processRewards(deployer, 0));
+    expect(tupleField(processed, "total-intervals")).toBeUint(7);
+    expect(tupleField(processed, "past-intervals")).toBeUint(1);
 
-    call = await rewards.shouldProcessRewards(0);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(0);
+    should = rewards.shouldProcessRewards(0);
+    expect(tupleField(should, "commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(should, "protocol-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(should, "commission-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(should, "protocol-sbtc")).toBeUint(uintWithDecimals(0).value);
 
     // Advance to third cycle
-    await chain.mineEmptyBlockUntil(21 + 21 + 21 + 1);
+    mineEmptyBlockUntil(21 + 21 + 21 + 1);
 
-    call = await rewards.shouldProcessRewards(0);
-    call.result.expectTuple()["total-intervals"].expectUint(7);
-    call.result.expectTuple()["past-intervals"].expectUint(7);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(4.285715);
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(81.428572);
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0.428572);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(8.142858);
+    should = rewards.shouldProcessRewards(0);
+    expect(tupleField(should, "total-intervals")).toBeUint(7);
+    expect(tupleField(should, "past-intervals")).toBeUint(7);
+    expect(tupleField(should, "commission-stx")).toBeUint(uintWithDecimals(4.285715).value);
+    expect(tupleField(should, "protocol-stx")).toBeUint(uintWithDecimals(81.428572).value);
+    expect(tupleField(should, "commission-sbtc")).toBeUint(uintWithDecimals(0.428572).value);
+    expect(tupleField(should, "protocol-sbtc")).toBeUint(uintWithDecimals(8.142858).value);
 
-    result = await rewards.processRewards(deployer, 0);
-    result.expectOk().expectTuple()["total-intervals"].expectUint(7);
-    result.expectOk().expectTuple()["past-intervals"].expectUint(7);
+    processed = okValue(rewards.processRewards(deployer, 0));
+    expect(tupleField(processed, "total-intervals")).toBeUint(7);
+    expect(tupleField(processed, "past-intervals")).toBeUint(7);
 
-    call = await rewards.shouldProcessRewards(0);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(0);
+    should = rewards.shouldProcessRewards(0);
+    expect(tupleField(should, "commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(should, "protocol-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(should, "commission-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(should, "protocol-sbtc")).toBeUint(uintWithDecimals(0).value);
 
-    call = await rewards.getCycleRewardsStStx(0);
-    call.result.expectTuple()["total-stx"].expectUintWithDecimals(100);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(5);
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(95);
-    call.result.expectTuple()["processed-commission-stx"].expectUintWithDecimals(5);
-    call.result.expectTuple()["processed-protocol-stx"].expectUintWithDecimals(95);
+    ststx = rewards.getCycleRewardsStStx(0);
+    expect(tupleField(ststx, "total-stx")).toBeUint(uintWithDecimals(100).value);
+    expect(tupleField(ststx, "commission-stx")).toBeUint(uintWithDecimals(5).value);
+    expect(tupleField(ststx, "protocol-stx")).toBeUint(uintWithDecimals(95).value);
+    expect(tupleField(ststx, "processed-commission-stx")).toBeUint(uintWithDecimals(5).value);
+    expect(tupleField(ststx, "processed-protocol-stx")).toBeUint(uintWithDecimals(95).value);
 
-    call = await rewards.getCycleRewardsStStxBtc(0);
-    call.result.expectTuple()["total-sbtc"].expectUintWithDecimals(10);
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0.5);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(9.5);
-    call.result.expectTuple()["processed-commission-sbtc"].expectUintWithDecimals(0.5);
-    call.result.expectTuple()["processed-protocol-sbtc"].expectUintWithDecimals(9.5);
+    ststxbtc = rewards.getCycleRewardsStStxBtc(0);
+    expect(tupleField(ststxbtc, "total-sbtc")).toBeUint(uintWithDecimals(10).value);
+    expect(tupleField(ststxbtc, "commission-sbtc")).toBeUint(uintWithDecimals(0.5).value);
+    expect(tupleField(ststxbtc, "protocol-sbtc")).toBeUint(uintWithDecimals(9.5).value);
+    expect(tupleField(ststxbtc, "processed-commission-sbtc")).toBeUint(uintWithDecimals(0.5).value);
+    expect(tupleField(ststxbtc, "processed-protocol-sbtc")).toBeUint(uintWithDecimals(9.5).value);
 
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(95);
-  },
-});
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(95));
+  });
 
-Clarinet.test({
-  name: "rewards-v4: pool owner share",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("rewards-v4: pool owner share", () => {
+    const rewards = new Rewards(deployer);
+    const dataPools = new DataPools(deployer);
+    const coreV1 = new CoreV1(deployer);
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-    let rewards = new Rewards(chain, deployer);
-    let dataPools = new DataPools(chain, deployer);
-    let coreV1 = new CoreV1(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, deployer)).toBeOk(Cl.bool(true));
 
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    let ststx = rewards.getCycleRewardsStStx(0);
+    expect(tupleField(ststx, "total-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "protocol-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "processed-commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "processed-protocol-stx")).toBeUint(uintWithDecimals(0).value);
 
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    let ststxbtc = rewards.getCycleRewardsStStxBtc(0);
+    expect(tupleField(ststxbtc, "total-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "commission-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "protocol-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "processed-commission-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "processed-protocol-sbtc")).toBeUint(uintWithDecimals(0).value);
 
-    let call = await rewards.getCycleRewardsStStx(0);
-    call.result.expectTuple()["total-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-commission-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-protocol-stx"].expectUintWithDecimals(0);
+    expect(
+      dataPools.setPoolOwnerCommission(deployer, qualifiedName("stacking-pool-v1"), wallet_1, 0.1),
+    ).toBeOk(Cl.bool(true));
 
-    call = await rewards.getCycleRewardsStStxBtc(0);
-    call.result.expectTuple()["total-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-commission-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-protocol-sbtc"].expectUintWithDecimals(0);
+    let poolOwner = dataPools.getPoolOwnerCommission(qualifiedName("stacking-pool-v1"));
+    expect(tupleField(poolOwner, "receiver")).toBePrincipal(wallet_1);
+    expect(tupleField(poolOwner, "share")).toBeUint(0.1 * 10000);
 
-    result = dataPools.setPoolOwnerCommission(
-      deployer,
-      qualifiedName("stacking-pool-v1"),
-      wallet_1.address,
-      0.1
-    );
-    result.expectOk().expectBool(true);
+    expect(coreV1.getStxBalance(wallet_1)).toBeUint(uintWithDecimals(100000000).value);
 
-    call = await dataPools.getPoolOwnerCommission(
-      qualifiedName("stacking-pool-v1")
-    );
-    call.result.expectTuple()["receiver"].expectPrincipal(wallet_1.address);
-    call.result.expectTuple()["share"].expectUint(0.1 * 10000);
-
-    call = await coreV1.getStxBalance(wallet_1.address);
-    call.result.expectUintWithDecimals(100000000);
-
-    result = await rewards.addRewards(
-      deployer,
-      qualifiedName("stacking-pool-v1"),
-      100
-    );
-    result.expectOk().expectBool(true);
-    result = await rewards.addRewardsSBtc(
-      deployer,
-      qualifiedName("stacking-pool-v1"),
-      10
-    );
-    result.expectOk().expectBool(true);
+    expect(rewards.addRewards(deployer, qualifiedName("stacking-pool-v1"), 100)).toBeOk(Cl.bool(true));
+    expect(rewards.addRewardsSBtc(deployer, qualifiedName("stacking-pool-v1"), 10)).toBeOk(Cl.bool(true));
 
     // 100 STX rewards, 5% total commission = 5 STX
     // Pool owner gets 10%
-    call = await coreV1.getStxBalance(wallet_1.address);
-    call.result.expectUintWithDecimals(100000000 + 0.5);
+    expect(coreV1.getStxBalance(wallet_1)).toBeUint(uintWithDecimals(100000000 + 0.5).value);
 
     // 10 sBTC rewards, 5% total commission = 0.5 sBTC
     // Pool owner gets 10%
-    call = await sBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0.05);
+    expect(sBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0.05));
 
-    call = await rewards.getCycleRewardsStStx(0);
-    call.result.expectTuple()["total-stx"].expectUintWithDecimals(100);
-    call.result.expectTuple()["commission-stx"].expectUintWithDecimals(4.5);
-    call.result.expectTuple()["protocol-stx"].expectUintWithDecimals(95);
-    call.result.expectTuple()["processed-commission-stx"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-protocol-stx"].expectUintWithDecimals(0);
+    ststx = rewards.getCycleRewardsStStx(0);
+    expect(tupleField(ststx, "total-stx")).toBeUint(uintWithDecimals(100).value);
+    expect(tupleField(ststx, "commission-stx")).toBeUint(uintWithDecimals(4.5).value);
+    expect(tupleField(ststx, "protocol-stx")).toBeUint(uintWithDecimals(95).value);
+    expect(tupleField(ststx, "processed-commission-stx")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststx, "processed-protocol-stx")).toBeUint(uintWithDecimals(0).value);
 
-    call = await rewards.getCycleRewardsStStxBtc(0);
-    call.result.expectTuple()["total-sbtc"].expectUintWithDecimals(10);
-    call.result.expectTuple()["commission-sbtc"].expectUintWithDecimals(0.45);
-    call.result.expectTuple()["protocol-sbtc"].expectUintWithDecimals(9.5);
-    call.result.expectTuple()["processed-commission-sbtc"].expectUintWithDecimals(0);
-    call.result.expectTuple()["processed-protocol-sbtc"].expectUintWithDecimals(0);
-  },
-});
+    ststxbtc = rewards.getCycleRewardsStStxBtc(0);
+    expect(tupleField(ststxbtc, "total-sbtc")).toBeUint(uintWithDecimals(10).value);
+    expect(tupleField(ststxbtc, "commission-sbtc")).toBeUint(uintWithDecimals(0.45).value);
+    expect(tupleField(ststxbtc, "protocol-sbtc")).toBeUint(uintWithDecimals(9.5).value);
+    expect(tupleField(ststxbtc, "processed-commission-sbtc")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(ststxbtc, "processed-protocol-sbtc")).toBeUint(uintWithDecimals(0).value);
+  });
 
-Clarinet.test({
-  name: "rewards-v4: get stx and sbtc",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("rewards-v4: get stx and sbtc", () => {
+    const rewards = new Rewards(deployer);
+    const sBtcToken = new SBtcToken(deployer);
 
-    let rewards = new Rewards(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
 
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(rewards.addRewards(deployer, qualifiedName("stacking-pool-v1"), 100)).toBeOk(Cl.bool(true));
 
-    result = await rewards.addRewards(
-      deployer,
-      qualifiedName("stacking-pool-v1"),
-      100
-    );
-    result.expectOk().expectBool(true);
+    expect(rewards.addRewardsSBtc(deployer, qualifiedName("stacking-pool-v1"), 10)).toBeOk(Cl.bool(true));
 
-    result = await rewards.addRewardsSBtc(
-      deployer,
-      qualifiedName("stacking-pool-v1"),
-      10
-    );
-    result.expectOk().expectBool(true);
+    expect(rewards.getStx(deployer, 100, deployer)).toBeOk(uintWithDecimals(100));
 
-    result = rewards.getStx(deployer, 100, deployer.address);
-    result.expectOk().expectUintWithDecimals(100);
+    expect(rewards.getSBtc(deployer, 10, deployer)).toBeOk(uintWithDecimals(10));
+  });
 
-    result = rewards.getSBtc(deployer, 10, deployer.address);
-    result.expectOk().expectUintWithDecimals(10);
-  },
-});
+  it("rewards-v4: set rewards interval length", () => {
+    const rewards = new Rewards(deployer);
 
-Clarinet.test({
-  name: "rewards-v4: set rewards interval length",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    expect(rewards.setRewardsIntervalLength(wallet_1, 3)).toBeErr(Cl.uint(20003));
 
-    let rewards = new Rewards(chain, deployer);
+    expect(rewards.setRewardsIntervalLength(deployer, 4)).toBeErr(Cl.uint(203005));
 
-    let result = await rewards.setRewardsIntervalLength(wallet_1, 3);
-    result.expectErr().expectUint(20003);
+    expect(rewards.setRewardsIntervalLength(deployer, 3)).toBeOk(Cl.bool(true));
 
-    result = await rewards.setRewardsIntervalLength(deployer, 4);
-    result.expectErr().expectUint(203005);
+    expect(rewards.getRewardsIntervalLength()).toBeUint(3);
+  });
 
-    result = await rewards.setRewardsIntervalLength(deployer, 3);
-    result.expectOk().expectBool(true);
+  //-------------------------------------
+  // Errors
+  //-------------------------------------
 
-    let call = await rewards.getRewardsIntervalLength();
-    call.result.expectUint(3);
-  },
-});
+  it("rewards-v4: can not add rewards with wrong commission contracts", () => {
+    const rewards = new Rewards(deployer);
+    const sBtcToken = new SBtcToken(deployer);
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-//-------------------------------------
-// Errors
-//-------------------------------------
-
-Clarinet.test({
-  name: "rewards-v4: can not add rewards with wrong commission contracts",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let rewards = new Rewards(chain, deployer);
-    let sBtcToken = new SBtcToken(chain, deployer);
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-
-    let result = await sBtcToken.protocolMint(
-      deployer,
-      100000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
-    result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      1000,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
+    expect(sBtcToken.protocolMint(deployer, 100000, deployer)).toBeOk(Cl.bool(true));
+    expect(stStxBtcToken.mintForProtocol(deployer, 1000, deployer)).toBeOk(Cl.bool(true));
 
     // Add rewards
-    result = await rewards.addRewards(
-      deployer,
-      qualifiedName("stacking-pool-v1"),
-      100
-    );
-    result.expectOk().expectBool(true);
-    result = await rewards.addRewardsSBtc(
-      deployer,
-      qualifiedName("stacking-pool-v1"),
-      100
-    );
-    result.expectOk().expectBool(true);
+    expect(rewards.addRewards(deployer, qualifiedName("stacking-pool-v1"), 100)).toBeOk(Cl.bool(true));
+    expect(rewards.addRewardsSBtc(deployer, qualifiedName("stacking-pool-v1"), 100)).toBeOk(Cl.bool(true));
 
     // Go to end of cycle
-    await chain.mineEmptyBlockUntil(19);
+    mineEmptyBlockUntil(19);
 
     // Check commission contracts
-    let call = await rewards.getStStxCommissionContract();
-    call.result.expectPrincipal(qualifiedName("commission-v2"));
-    call = await rewards.getStStxBtcCommissionContract();
-    call.result.expectPrincipal(qualifiedName("commission-btc-v1"));
+    expect(rewards.getStStxCommissionContract()).toBePrincipal(qualifiedName("commission-v2"));
+    expect(rewards.getStStxBtcCommissionContract()).toBePrincipal(qualifiedName("commission-btc-v1"));
 
     // Can not add rewards if contracts are wrong
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "process-rewards",
-        [
-          types.uint(0),
-          types.principal(qualifiedName("commission-btc-v1")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.principal(qualifiedName("reserve-v1")),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(203003);
+    let r = simnet.callPublicFn(
+      "rewards-v5",
+      "process-rewards",
+      [
+        Cl.uint(0),
+        Cl.principal(qualifiedName("commission-btc-v1")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.principal(qualifiedName("reserve-v1")),
+      ],
+      deployer,
+    ).result;
+    expect(r).toBeErr(Cl.uint(203003));
 
     // Switch commission contracts
-    result = await rewards.setStStxCommissionContract(
-      deployer,
-      qualifiedName("commission-btc-v1")
-    );
-    result.expectOk().expectBool(true);
-    result = await rewards.setStStxBtcCommissionContract(
-      deployer,
-      qualifiedName("commission-v2")
-    );
-    result.expectOk().expectBool(true);
+    expect(rewards.setStStxCommissionContract(deployer, qualifiedName("commission-btc-v1"))).toBeOk(Cl.bool(true));
+    expect(rewards.setStStxBtcCommissionContract(deployer, qualifiedName("commission-v2"))).toBeOk(Cl.bool(true));
 
-    call = await rewards.getStStxCommissionContract();
-    call.result.expectPrincipal(qualifiedName("commission-btc-v1"));
-    call = await rewards.getStStxBtcCommissionContract();
-    call.result.expectPrincipal(qualifiedName("commission-v2"));
+    expect(rewards.getStStxCommissionContract()).toBePrincipal(qualifiedName("commission-btc-v1"));
+    expect(rewards.getStStxBtcCommissionContract()).toBePrincipal(qualifiedName("commission-v2"));
 
     // Can get rewards
-    block = chain.mineBlock([
-      Tx.contractCall(
-        "rewards-v5",
-        "process-rewards",
-        [
-          types.uint(0),
-          types.principal(qualifiedName("commission-btc-v1")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.principal(qualifiedName("reserve-v1")),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectOk().expectTuple();
-  },
-});
+    r = simnet.callPublicFn(
+      "rewards-v5",
+      "process-rewards",
+      [
+        Cl.uint(0),
+        Cl.principal(qualifiedName("commission-btc-v1")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.principal(qualifiedName("reserve-v1")),
+      ],
+      deployer,
+    ).result;
+    expect(r).toHaveClarityType(ClarityType.ResponseOk);
+  });
 
-//-------------------------------------
-// Access
-//-------------------------------------
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-Clarinet.test({
-  name: "rewards-v4: only protocol can get stx and sbtc",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("rewards-v4: only protocol can get stx and sbtc", () => {
+    const rewards = new Rewards(deployer);
 
-    let rewards = new Rewards(chain, deployer);
+    expect(rewards.getStx(wallet_1, 200, wallet_1)).toBeErr(Cl.uint(20003));
 
-    let result = rewards.getStx(wallet_1, 200, wallet_1.address);
-    result.expectErr().expectUint(20003);
+    expect(rewards.getSBtc(wallet_1, 200, wallet_1)).toBeErr(Cl.uint(20003));
+  });
 
-    result = rewards.getSBtc(wallet_1, 200, wallet_1.address);
-    result.expectErr().expectUint(20003);
-  },
-});
+  it("rewards-v4: only protocol can set commission contracts", () => {
+    const rewards = new Rewards(deployer);
 
-Clarinet.test({
-  name: "rewards-v4: only protocol can set commission contracts",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    expect(rewards.setStStxCommissionContract(wallet_1, wallet_1)).toBeErr(Cl.uint(20003));
 
-    let rewards = new Rewards(chain, deployer);
-
-    let result = rewards.setStStxCommissionContract(wallet_1, wallet_1.address);
-    result.expectErr().expectUint(20003);
-
-    result = rewards.setStStxBtcCommissionContract(wallet_1, wallet_1.address);
-    result.expectErr().expectUint(20003);
-  },
+    expect(rewards.setStStxBtcCommissionContract(wallet_1, wallet_1)).toBeErr(Cl.uint(20003));
+  });
 });

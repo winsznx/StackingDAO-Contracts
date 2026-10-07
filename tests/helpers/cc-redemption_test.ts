@@ -1,47 +1,38 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { Reserve } from "../wrappers/reserve-helpers.ts";
+import { qualifiedName, uintWithDecimals } from "../wrappers/tests-utils";
+import { Reserve } from "../wrappers/reserve-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
 
 //-------------------------------------
 // Core
 //-------------------------------------
 
-Clarinet.test({
-  name: "cc-redemption: deposit and withdraw for normal stacking",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+describe("cc-redemption", () => {
+  it("cc-redemption: deposit and withdraw for normal stacking", () => {
+    const reserve = new Reserve(deployer);
 
-    let reserve = new Reserve(chain, deployer);
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(0));
 
-    let call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(0);
+    const { result } = simnet.callPublicFn(
+      "stacking-dao-core-v2",
+      "deposit",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.principal(qualifiedName("commission-v2")),
+        Cl.principal(qualifiedName("staking-v1")),
+        Cl.principal(qualifiedName("direct-helpers-v2")),
+        Cl.uint(100 * 1_000_000),
+        Cl.none(),
+        Cl.none(),
+      ],
+      deployer,
+    );
+    expect(result).toBeOk(uintWithDecimals(100));
 
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "stacking-dao-core-v2",
-        "deposit",
-        [
-          types.principal(qualifiedName("reserve-v1")),
-          types.principal(qualifiedName("commission-v2")),
-          types.principal(qualifiedName("staking-v1")),
-          types.principal(qualifiedName("direct-helpers-v2")),
-          types.uint(100 * 1000000),
-          types.none(),
-          types.none(),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectOk().expectUintWithDecimals(100);
-
-    call = await reserve.getTotalStx();
-    call.result.expectOk().expectUintWithDecimals(100);
-  },
+    expect(reserve.getTotalStx()).toBeOk(uintWithDecimals(100));
+  });
 });

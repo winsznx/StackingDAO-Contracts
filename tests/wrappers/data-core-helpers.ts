@@ -1,299 +1,254 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "./tests-utils.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // Data Core
 // ---------------------------------------------------------
 
-class DataCore {
-  chain: Chain;
-  deployer: Account;
+export class DataCore {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getStxPerStStx(reserveContract: string) {
-    return this.chain.callReadOnlyFn(
+  getStxPerStStx(reserveContract: string): ClarityValue {
+    return simnet.callPublicFn(
       "data-core-v2",
       "get-stx-per-ststx",
-      [types.principal(reserveContract)],
-      this.deployer.address
-    );
+      [Cl.principal(reserveContract)],
+      this.deployer,
+    ).result;
   }
 
-  getStxPerStStxHelper(amount: number) {
-    return this.chain.callReadOnlyFn(
+  getStxPerStStxHelper(amount: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "data-core-v2",
       "get-stx-per-ststx-helper",
-      [types.uint(amount * 1000000)],
-      this.deployer.address
-    );
+      [Cl.uint(amount * 1_000_000)],
+      this.deployer,
+    ).result;
   }
 
-  getCycleWithdrawOffset() {
-    return this.chain.callReadOnlyFn(
+  getCycleWithdrawOffset(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "data-core-v1",
       "get-cycle-withdraw-offset",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  setCycleWithdrawOffset(caller: Account, offset: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v1",
-        "set-cycle-withdraw-offset",
-        [types.uint(offset)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setCycleWithdrawOffset(caller: string, offset: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v1",
+      "set-cycle-withdraw-offset",
+      [Cl.uint(offset)],
+      caller,
+    ).result;
   }
 
-  getMigratedNft(nftId: number) {
-    return this.chain.callReadOnlyFn(
+  getMigratedNft(nftId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "data-core-v1",
       "get-migrated-nft",
-      [types.uint(nftId)],
-      this.deployer.address
-    );
+      [Cl.uint(nftId)],
+      this.deployer,
+    ).result;
   }
 
-  getWithdrawalsByNft(nftId: number) {
-    return this.chain.callReadOnlyFn(
+  getWithdrawalsByNft(nftId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "data-core-v1",
       "get-withdrawals-by-nft",
-      [types.uint(nftId)],
-      this.deployer.address
-    );
+      [Cl.uint(nftId)],
+      this.deployer,
+    ).result;
   }
 
   setWithdrawalsByNft(
-    caller: Account,
+    caller: string,
     nftId: number,
     stxAmount: number,
     stStxAmount: number,
-    unlockBurnHeight: number
-  ) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v1",
-        "set-withdrawals-by-nft",
-        [
-          types.uint(nftId),
-          types.uint(stxAmount * 1000000),
-          types.uint(stStxAmount * 1000000),
-          types.uint(unlockBurnHeight),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    unlockBurnHeight: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v1",
+      "set-withdrawals-by-nft",
+      [
+        Cl.uint(nftId),
+        Cl.uint(stxAmount * 1_000_000),
+        Cl.uint(stStxAmount * 1_000_000),
+        Cl.uint(unlockBurnHeight),
+      ],
+      caller,
+    ).result;
   }
 
-  deleteWithdrawalsByNft(caller: Account, nftId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v1",
-        "delete-withdrawals-by-nft",
-        [types.uint(nftId)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  deleteWithdrawalsByNft(caller: string, nftId: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v1",
+      "delete-withdrawals-by-nft",
+      [Cl.uint(nftId)],
+      caller,
+    ).result;
   }
 
-  getStStxBtcWithdrawalsByNft(nftId: number) {
-    return this.chain.callReadOnlyFn(
+  getStStxBtcWithdrawalsByNft(nftId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "data-core-v2",
       "get-ststxbtc-withdrawals-by-nft",
-      [types.uint(nftId)],
-      this.deployer.address
-    );
+      [Cl.uint(nftId)],
+      this.deployer,
+    ).result;
   }
 
   setStStxBtcWithdrawalsByNft(
-    caller: Account,
+    caller: string,
     nftId: number,
     stxAmount: number,
     stStxAmount: number,
-    unlockBurnHeight: number
-  ) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v2",
-        "set-ststxbtc-withdrawals-by-nft",
-        [
-          types.uint(nftId),
-          types.uint(stxAmount * 1000000),
-          types.uint(stStxAmount * 1000000),
-          types.uint(unlockBurnHeight),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    unlockBurnHeight: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v2",
+      "set-ststxbtc-withdrawals-by-nft",
+      [
+        Cl.uint(nftId),
+        Cl.uint(stxAmount * 1_000_000),
+        Cl.uint(stStxAmount * 1_000_000),
+        Cl.uint(unlockBurnHeight),
+      ],
+      caller,
+    ).result;
   }
 
-  deleteStStxBtcWWithdrawalsByNft(caller: Account, nftId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v2",
-        "delete-ststxbtc-withdrawals-by-nft",
-        [types.uint(nftId)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  deleteStStxBtcWWithdrawalsByNft(caller: string, nftId: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v2",
+      "delete-ststxbtc-withdrawals-by-nft",
+      [Cl.uint(nftId)],
+      caller,
+    ).result;
   }
 }
-export { DataCore };
 
 // ---------------------------------------------------------
 // Data Core
 // ---------------------------------------------------------
 
-class DataCoreV2 {
-  chain: Chain;
-  deployer: Account;
+export class DataCoreV2 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getStxPerStStx(reserveContract: string) {
-    return this.chain.callReadOnlyFn(
+  getStxPerStStx(reserveContract: string): ClarityValue {
+    return simnet.callPublicFn(
       "data-core-v3",
       "get-stx-per-ststx",
-      [types.principal(reserveContract)],
-      this.deployer.address
-    );
+      [Cl.principal(reserveContract)],
+      this.deployer,
+    ).result;
   }
 
-  getStxPerStStxHelper(amount: number) {
-    return this.chain.callReadOnlyFn(
+  getStxPerStStxHelper(amount: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "data-core-v3",
       "get-stx-per-ststx-helper",
-      [types.uint(amount * 1000000)],
-      this.deployer.address
-    );
+      [Cl.uint(amount * 1_000_000)],
+      this.deployer,
+    ).result;
   }
 
-  getStStxBtcWithdrawalsByNft(nftId: number) {
-    return this.chain.callReadOnlyFn(
+  getStStxBtcWithdrawalsByNft(nftId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "data-core-v2",
       "get-ststxbtc-withdrawals-by-nft",
-      [types.uint(nftId)],
-      this.deployer.address
-    );
+      [Cl.uint(nftId)],
+      this.deployer,
+    ).result;
   }
 
   setStStxBtcWithdrawalsByNft(
-    caller: Account,
+    caller: string,
     nftId: number,
     stxAmount: number,
-    unlockBurnHeight: number
-  ) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v2",
-        "set-ststxbtc-withdrawals-by-nft",
-        [
-          types.uint(nftId),
-          types.uint(stxAmount * 1000000),
-          types.uint(unlockBurnHeight),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    unlockBurnHeight: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v2",
+      "set-ststxbtc-withdrawals-by-nft",
+      [
+        Cl.uint(nftId),
+        Cl.uint(stxAmount * 1_000_000),
+        Cl.uint(unlockBurnHeight),
+      ],
+      caller,
+    ).result;
   }
 
-  deleteStStxBtcWWithdrawalsByNft(caller: Account, nftId: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v2",
-        "delete-ststxbtc-withdrawals-by-nft",
-        [types.uint(nftId)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  deleteStStxBtcWWithdrawalsByNft(caller: string, nftId: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v2",
+      "delete-ststxbtc-withdrawals-by-nft",
+      [Cl.uint(nftId)],
+      caller,
+    ).result;
   }
 
-  getCycleWithdrawInset() {
-    return this.chain.callReadOnlyFn(
+  getCycleWithdrawInset(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "data-core-v2",
       "get-cycle-withdraw-inset",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  setCycleWithdrawInset(caller: Account, inset: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v2",
-        "set-cycle-withdraw-inset",
-        [types.uint(inset)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setCycleWithdrawInset(caller: string, inset: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v2",
+      "set-cycle-withdraw-inset",
+      [Cl.uint(inset)],
+      caller,
+    ).result;
   }
 
-  getStxIdle(cycle: number) {
-    return this.chain.callReadOnlyFn(
+  getStxIdle(cycle: number): ClarityValue {
+    return simnet.callReadOnlyFn(
       "data-core-v2",
       "get-stx-idle",
-      [types.uint(cycle)],
-      this.deployer.address
-    );
+      [Cl.uint(cycle)],
+      this.deployer,
+    ).result;
   }
 
-  setStxIdle(caller: Account, cycle: number, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v2",
-        "set-stx-idle",
-        [types.uint(cycle), types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setStxIdle(caller: string, cycle: number, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v2",
+      "set-stx-idle",
+      [Cl.uint(cycle), Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  increaseStxIdle(caller: Account, cycle: number, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v2",
-        "increase-stx-idle",
-        [types.uint(cycle), types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  increaseStxIdle(caller: string, cycle: number, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v2",
+      "increase-stx-idle",
+      [Cl.uint(cycle), Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  decreaseStxIdle(caller: Account, cycle: number, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "data-core-v2",
-        "decrease-stx-idle",
-        [types.uint(cycle), types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  decreaseStxIdle(caller: string, cycle: number, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "data-core-v2",
+      "decrease-stx-idle",
+      [Cl.uint(cycle), Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 }
-export { DataCoreV2 };

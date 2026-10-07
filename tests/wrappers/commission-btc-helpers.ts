@@ -1,79 +1,59 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "./tests-utils.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
+import { qualifiedName } from "./tests-utils";
 
 // ---------------------------------------------------------
 // Commission BTC
 // ---------------------------------------------------------
 
-class CommissionBtc {
-  chain: Chain;
-  deployer: Account;
+export class CommissionBtc {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getStakingBasisPoints() {
-    return this.chain.callReadOnlyFn(
+  getStakingBasisPoints(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "commission-btc-v1",
       "get-staking-basispoints",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getCycleRewardsEndBlock() {
-    return this.chain.callReadOnlyFn(
+  getCycleRewardsEndBlock(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "commission-btc-v1",
       "get-cycle-rewards-end-block",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  addCommission(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "commission-btc-v1",
-        "add-commission",
-        [
-          types.principal(qualifiedName("staking-v1")),
-          types.uint(amount * 100000000),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  addCommission(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "commission-btc-v1",
+      "add-commission",
+      [Cl.principal(qualifiedName("staking-v1")), Cl.uint(amount * 100_000_000)],
+      caller,
+    ).result;
   }
 
-  withdrawCommission(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "commission-btc-v1",
-        "withdraw-commission",
-        [types.uint(amount * 100000000), types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  withdrawCommission(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "commission-btc-v1",
+      "withdraw-commission",
+      [Cl.uint(amount * 100_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  setStakingBasisPoints(caller: Account, percentage: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "commission-btc-v1",
-        "set-staking-basispoints",
-        [types.uint(percentage * 10000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setStakingBasisPoints(caller: string, percentage: number): ClarityValue {
+    return simnet.callPublicFn(
+      "commission-btc-v1",
+      "set-staking-basispoints",
+      [Cl.uint(percentage * 10_000)],
+      caller,
+    ).result;
   }
 }
-export { CommissionBtc };

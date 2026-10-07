@@ -1,222 +1,167 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
-qualifiedName("")
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { SDAOToken } from '../wrappers/sdao-token-helpers.ts';
-import { Tax } from '../wrappers/tax-helpers.ts';
-import { CoreV1 as Core } from '../wrappers/stacking-dao-core-helpers.ts';
+import { qualifiedName, uintWithDecimals } from "../wrappers/tests-utils";
+import { SDAOToken } from "../wrappers/sdao-token-helpers";
+import { Tax } from "../wrappers/tax-helpers";
+import { CoreV1 as Core } from "../wrappers/stacking-dao-core-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
 
 //-------------------------------------
-// Tax 
+// Tax
 //-------------------------------------
 
-Clarinet.test({
-  name: "tax: handle tax",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let sDaoToken = new SDAOToken(chain, deployer);
-    let tax = new Tax(chain, deployer);
-    let core = new Core(chain, deployer);
+describe("tax", () => {
+  it("tax: handle tax", () => {
+    const sDaoToken = new SDAOToken(deployer);
+    const tax = new Tax(deployer);
+    const core = new Core(deployer);
 
     // Get sDAO for liquidity
-    let result = await sDaoToken.mintForProtocol(deployer, 1000, deployer.address);
-    result.expectOk().expectBool(true);
+    expect(sDaoToken.mintForProtocol(deployer, 1000, deployer)).toBeOk(Cl.bool(true));
 
     // Create sDAO/STX pair
-    let block = chain.mineBlock([
-      Tx.contractCall("swap", "create-pair", [
-        types.principal(qualifiedName("sdao-token")),
-        types.principal(qualifiedName("wstx-token")),
-        types.principal(qualifiedName("swap-lp-token")),
-        types.uint(100),
-        types.ascii("sDAO-STX"),
-        types.uint(100 * 1000000),
-        types.uint(100 * 1000000),
-
-      ], deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(
+      simnet.callPublicFn(
+        "swap",
+        "create-pair",
+        [
+          Cl.principal(qualifiedName("sdao-token")),
+          Cl.principal(qualifiedName("wstx-token")),
+          Cl.principal(qualifiedName("swap-lp-token")),
+          Cl.uint(100),
+          Cl.stringAscii("sDAO-STX"),
+          Cl.uint(100 * 1_000_000),
+          Cl.uint(100 * 1_000_000),
+        ],
+        deployer,
+      ).result,
+    ).toBeOk(Cl.bool(true));
 
     // Transfer 100 STX to contract
-    block = chain.mineBlock([
-      Tx.transferSTX(100 * 1000000, qualifiedName("tax-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(simnet.transferSTX(100 * 1_000_000, qualifiedName("tax-v1"), deployer).result).toBeOk(Cl.bool(true));
 
     // Contract balances
-    let call: any = core.getStxBalance(qualifiedName("tax-v1"));
-    call.result.expectUintWithDecimals(100);
+    expect(core.getStxBalance(qualifiedName("tax-v1"))).toBeUint(uintWithDecimals(100).value);
 
-    call = sDaoToken.getBalance(qualifiedName("tax-v1"));
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(sDaoToken.getBalance(qualifiedName("tax-v1"))).toBeOk(uintWithDecimals(0));
 
-    call = chain.callReadOnlyFn("swap-lp-token", "get-balance", [
-      types.principal(qualifiedName("tax-v1"))
-    ], deployer.address)
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(
+      simnet.callReadOnlyFn(
+        "swap-lp-token",
+        "get-balance",
+        [Cl.principal(qualifiedName("tax-v1"))],
+        deployer,
+      ).result,
+    ).toBeOk(uintWithDecimals(0));
 
     // Handle tax
-    result = await tax.handleTax(deployer);
-    result.expectOk().expectBool(true);
+    expect(tax.handleTax(deployer)).toBeOk(Cl.bool(true));
 
     // Contract balances
-    call = core.getStxBalance(qualifiedName("tax-v1"));
-    call.result.expectUintWithDecimals(0);
+    expect(core.getStxBalance(qualifiedName("tax-v1"))).toBeUint(uintWithDecimals(0).value);
 
-    call = sDaoToken.getBalance(qualifiedName("tax-v1"));
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(sDaoToken.getBalance(qualifiedName("tax-v1"))).toBeOk(uintWithDecimals(0));
 
-    call = chain.callReadOnlyFn("swap-lp-token", "get-balance", [
-      types.principal(qualifiedName("tax-v1"))
-    ], deployer.address)
-    call.result.expectOk().expectUintWithDecimals(99.623776);
-  }
-});
+    expect(
+      simnet.callReadOnlyFn(
+        "swap-lp-token",
+        "get-balance",
+        [Cl.principal(qualifiedName("tax-v1"))],
+        deployer,
+      ).result,
+    ).toBeOk(uintWithDecimals(99.623776));
+  });
 
-//-------------------------------------
-// Keeper 
-//-------------------------------------
+  //-------------------------------------
+  // Keeper
+  //-------------------------------------
 
-Clarinet.test({
-  name: "tax: keeper functions",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("tax: keeper functions", () => {
+    const tax = new Tax(deployer);
 
-    let tax = new Tax(chain, deployer);
+    expect(tax.checkJob()).toBeOk(Cl.bool(false));
 
-    let call = await tax.checkJob();
-    call.result.expectOk().expectBool(false);
+    expect(tax.initialize(deployer)).toBeOk(Cl.bool(true));
 
-    let result = await tax.initialize(deployer);
-    result.expectOk().expectBool(true);
-
-    result = await tax.runJob(deployer);
-    result.expectErr().expectUint(21001);
+    expect(tax.runJob(deployer)).toBeErr(Cl.uint(21001));
 
     // Transfer 100 STX to contract
-    let block = chain.mineBlock([
-      Tx.transferSTX(100 * 1000000, qualifiedName("tax-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(simnet.transferSTX(100 * 1_000_000, qualifiedName("tax-v1"), deployer).result).toBeOk(Cl.bool(true));
 
-    call = await tax.checkJob();
-    call.result.expectOk().expectBool(true);
+    expect(tax.checkJob()).toBeOk(Cl.bool(true));
 
     // Can not swap as pair not created
-    result = await tax.runJob(deployer);
-    result.expectErr().expectUint(21002);
-  }
-});
+    expect(tax.runJob(deployer)).toBeErr(Cl.uint(21002));
+  });
 
-//-------------------------------------
-// Admin 
-//-------------------------------------
+  //-------------------------------------
+  // Admin
+  //-------------------------------------
 
-Clarinet.test({
-  name: "tax: protocol can retreive tokens",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let tax = new Tax(chain, deployer);
-    let sDaoToken = new SDAOToken(chain, deployer);
-    let core = new Core(chain, deployer);
+  it("tax: protocol can retreive tokens", () => {
+    const tax = new Tax(deployer);
+    const sDaoToken = new SDAOToken(deployer);
+    const core = new Core(deployer);
 
     // Transfer 100 STX to contract
-    let block = chain.mineBlock([
-      Tx.transferSTX(100 * 1000000, qualifiedName("tax-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(simnet.transferSTX(100 * 1_000_000, qualifiedName("tax-v1"), deployer).result).toBeOk(Cl.bool(true));
 
     // Transfer 100 sDAO to contract
-    let result = await sDaoToken.mintForProtocol(deployer, 100, qualifiedName("tax-v1"));
-    result.expectOk().expectBool(true);
+    expect(sDaoToken.mintForProtocol(deployer, 100, qualifiedName("tax-v1"))).toBeOk(Cl.bool(true));
 
     // Contract balances
-    let call = core.getStxBalance(qualifiedName("tax-v1"));
-    call.result.expectUintWithDecimals(100);
+    expect(core.getStxBalance(qualifiedName("tax-v1"))).toBeUint(uintWithDecimals(100).value);
 
-    call = sDaoToken.getBalance(qualifiedName("tax-v1"));
-    call.result.expectOk().expectUintWithDecimals(100);
+    expect(sDaoToken.getBalance(qualifiedName("tax-v1"))).toBeOk(uintWithDecimals(100));
 
     // Retreive tokens
-    result = await tax.retreiveStxTokens(deployer, 10, deployer.address);
-    result.expectOk().expectUintWithDecimals(10);
+    expect(tax.retreiveStxTokens(deployer, 10, deployer)).toBeOk(uintWithDecimals(10));
 
-    result = await tax.retreiveTokens(deployer, "sdao-token", 10, deployer.address);
-    result.expectOk().expectUintWithDecimals(10);
+    expect(tax.retreiveTokens(deployer, "sdao-token", 10, deployer)).toBeOk(uintWithDecimals(10));
 
     // Contract balances
-    call = core.getStxBalance(qualifiedName("tax-v1"));
-    call.result.expectUintWithDecimals(90);
+    expect(core.getStxBalance(qualifiedName("tax-v1"))).toBeUint(uintWithDecimals(90).value);
 
-    call = sDaoToken.getBalance(qualifiedName("tax-v1"));
-    call.result.expectOk().expectUintWithDecimals(90);
-  }
-});
+    expect(sDaoToken.getBalance(qualifiedName("tax-v1"))).toBeOk(uintWithDecimals(90));
+  });
 
-Clarinet.test({
-  name: "tax: protocol can set min amount to handle",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("tax: protocol can set min amount to handle", () => {
+    const tax = new Tax(deployer);
 
-    let tax = new Tax(chain, deployer);
+    expect(tax.setMinBalanceToHandle(deployer, 500)).toBeOk(Cl.bool(true));
 
-    let result = await tax.setMinBalanceToHandle(deployer, 500);
-    result.expectOk().expectBool(true);
+    expect(tax.getMinBalanceToHandle()).toBeUint(uintWithDecimals(500).value);
+  });
 
-    let call = await tax.getMinBalanceToHandle();
-    call.result.expectUintWithDecimals(500);
-  }
-});
+  it("tax: protocol can set percentage to swap", () => {
+    const tax = new Tax(deployer);
 
-Clarinet.test({
-  name: "tax: protocol can set percentage to swap",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(tax.setPercentageToSwap(deployer, 0.2)).toBeOk(Cl.bool(true));
 
-    let tax = new Tax(chain, deployer);
+    expect(tax.getPercentageToSwap()).toBeUint(0.2 * 10_000);
+  });
 
-    let result = await tax.setPercentageToSwap(deployer, 0.2);
-    result.expectOk().expectBool(true);
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-    let call = await tax.getPercentageToSwap();
-    call.result.expectUint(0.2 * 10000);
-  }
-});
+  it("tax: only protocol can retreive tokens", () => {
+    const tax = new Tax(deployer);
 
-//-------------------------------------
-// Access 
-//-------------------------------------
+    expect(tax.retreiveStxTokens(wallet_1, 10, wallet_1)).toBeErr(Cl.uint(20003));
 
-Clarinet.test({
-  name: "tax: only protocol can retreive tokens",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    expect(tax.retreiveTokens(wallet_1, "sdao-token", 10, wallet_1)).toBeErr(Cl.uint(20003));
+  });
 
-    let tax = new Tax(chain, deployer);
+  it("tax: only protocol can set min amount to handle and percentage to swap", () => {
+    const tax = new Tax(deployer);
 
-    let result = await tax.retreiveStxTokens(wallet_1, 10, wallet_1.address);
-    result.expectErr().expectUint(20003);
+    expect(tax.setMinBalanceToHandle(wallet_1, 500)).toBeErr(Cl.uint(20003));
 
-    result = await tax.retreiveTokens(wallet_1, "sdao-token", 10, wallet_1.address);
-    result.expectErr().expectUint(20003);
-  }
-});
-
-Clarinet.test({
-  name: "tax: only protocol can set min amount to handle and percentage to swap",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let tax = new Tax(chain, deployer);
-
-    let result = await tax.setMinBalanceToHandle(wallet_1, 500);
-    result.expectErr().expectUint(20003);
-
-    result = await tax.setPercentageToSwap(wallet_1, 0.2);
-    result.expectErr().expectUint(20003);
-  }
+    expect(tax.setPercentageToSwap(wallet_1, 0.2)).toBeErr(Cl.uint(20003));
+  });
 });

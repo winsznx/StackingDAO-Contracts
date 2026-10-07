@@ -1,64 +1,67 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // Fast Pool V2
 // ---------------------------------------------------------
 
-class FastPoolV2 {
-  chain: Chain;
-  deployer: Account;
+export class FastPoolV2 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getStxAccount(user: string) {
-    return this.chain.callReadOnlyFn("pox-fast-pool-v2-mock", "get-stx-account", [
-      types.principal(user)
-    ], this.deployer.address);
+  getStxAccount(user: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "pox-fast-pool-v2-mock",
+      "get-stx-account",
+      [Cl.principal(user)],
+      this.deployer,
+    ).result;
   }
 
-  getLockedInfoUser(user: string) {
-    return this.chain.callReadOnlyFn("pox-fast-pool-v2-mock", "get-locked-info-user", [
-      types.principal(user),
-    ], this.deployer.address);
+  getLockedInfoUser(user: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "pox-fast-pool-v2-mock",
+      "get-locked-info-user",
+      [Cl.principal(user)],
+      this.deployer,
+    ).result;
   }
 
-  notLockedForCycle(unlockBurnHeight: number, cycle: number) {
-    return this.chain.callReadOnlyFn("pox-fast-pool-v2-mock", "not-locked-for-cycle", [
-      types.uint(unlockBurnHeight),
-      types.uint(cycle)
-    ], this.deployer.address);
+  notLockedForCycle(unlockBurnHeight: number, cycle: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "pox-fast-pool-v2-mock",
+      "not-locked-for-cycle",
+      [Cl.uint(unlockBurnHeight), Cl.uint(cycle)],
+      this.deployer,
+    ).result;
   }
 
-  delegateStx(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("pox-fast-pool-v2-mock", "delegate-stx", [
-        types.uint(amount * 1000000),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  delegateStx(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "pox-fast-pool-v2-mock",
+      "delegate-stx",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  delegateStackStx(caller: Account, user: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("pox-fast-pool-v2-mock", "delegate-stack-stx", [
-        types.principal(user),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  delegateStackStx(caller: string, user: string): ClarityValue {
+    return simnet.callPublicFn(
+      "pox-fast-pool-v2-mock",
+      "delegate-stack-stx",
+      [Cl.principal(user)],
+      caller,
+    ).result;
   }
 
-  delegateStackStxMany(caller: Account, users: string[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("pox-fast-pool-v2-mock", "delegate-stack-stx-many", [
-        types.list(users.map(user => types.principal(user))),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  delegateStackStxMany(caller: string, users: string[]): ClarityValue {
+    return simnet.callPublicFn(
+      "pox-fast-pool-v2-mock",
+      "delegate-stack-stx-many",
+      [Cl.list(users.map((u) => Cl.principal(u)))],
+      caller,
+    ).result;
   }
-
 }
-export { FastPoolV2 };

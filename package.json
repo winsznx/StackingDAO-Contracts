@@ -1,0 +1,28 @@
+{
+  "name": "stackingdao-clarity",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:report": "vitest run -- --cov --cost",
+    "test:coverage": "vitest run -- --cov && rm -rf coverage && genhtml lcov.info -o coverage && open coverage/index.html"
+  },
+  "devDependencies": {
+    "@hirosystems/clarinet-sdk": "2.14.0",
+    "@stacks/transactions": "^6.17.0",
+    "typescript": "^5.4.5",
+    "vite": "5.4.10",
+    "@vitest/coverage-v8": "1.6.0",
+    "vitest": "1.6.0",
+    "vitest-environment-clarinet": "2.6.0"
+  },
+  "resolutions": {
+    "vite": "5.4.10",
+    "@vitest/runner": "1.6.0",
+    "@vitest/expect": "1.6.0",
+    "@vitest/snapshot": "1.6.0",
+    "@vitest/spy": "1.6.0",
+    "@vitest/utils": "1.6.0"
+  }
+}

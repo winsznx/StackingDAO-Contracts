@@ -1,193 +1,155 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // stSTXbtc tracking
 // ---------------------------------------------------------
 
-class StStxBtcTracking {
-  chain: Chain;
-  deployer: Account;
+type HolderPosition = { holder: string; position: string };
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+export class StStxBtcTracking {
+  private deployer: string;
+
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getClaimsEnabled() {
-    return this.chain.callReadOnlyFn(
+  getClaimsEnabled(): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-v2",
       "get-claims-enabled",
       [],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getSavedRewards(holder: string, position: string) {
-    return this.chain.callReadOnlyFn(
+  getSavedRewards(holder: string, position: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-v2",
       "get-saved-rewards",
-      [types.principal(holder), types.principal(position)],
-      this.deployer.address
-    );
+      [Cl.principal(holder), Cl.principal(position)],
+      this.deployer,
+    ).result;
   }
 
-  refreshWallet(caller: Account, holder: string, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-v2",
-        "refresh-wallet",
-        [types.principal(holder), types.uint(amount)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  refreshWallet(caller: string, holder: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-v2",
+      "refresh-wallet",
+      [Cl.principal(holder), Cl.uint(amount)],
+      caller,
+    ).result;
   }
 
-  refreshPosition(caller: Account, holder: string, position: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-v2",
-        "refresh-position",
-        [types.principal(holder), types.principal(position)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  refreshPosition(caller: string, holder: string, position: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-v2",
+      "refresh-position",
+      [Cl.principal(holder), Cl.principal(position)],
+      caller,
+    ).result;
   }
 
-
-  savePendingRewards(caller: Account, holder: string, position: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-v2",
-        "save-pending-rewards",
-        [types.principal(holder), types.principal(position)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  savePendingRewards(caller: string, holder: string, position: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-v2",
+      "save-pending-rewards",
+      [Cl.principal(holder), Cl.principal(position)],
+      caller,
+    ).result;
   }
 
-  addRewards(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-v2",
-        "add-rewards",
-        [types.uint(amount * 100000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  addRewards(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-v2",
+      "add-rewards",
+      [Cl.uint(amount * 100_000_000)],
+      caller,
+    ).result;
   }
 
-  getPendingRewardsMany(holders: any[]) {
-    return this.chain.callReadOnlyFn(
+  getPendingRewardsMany(holders: HolderPosition[]): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-v2",
       "get-pending-rewards-many",
       [
-        types.list(
-          holders.map((holder) =>
-            types.tuple({
-              holder: types.principal(holder.holder),
-              position: types.principal(holder.position),
-            })
-          )
+        Cl.list(
+          holders.map((h) =>
+            Cl.tuple({
+              holder: Cl.principal(h.holder),
+              position: Cl.principal(h.position),
+            }),
+          ),
         ),
       ],
-      this.deployer.address
-    );
+      this.deployer,
+    ).result;
   }
 
-  getPendingRewards(holder: string, position: string) {
-    return this.chain.callReadOnlyFn(
+  getPendingRewards(holder: string, position: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-tracking-v2",
       "get-pending-rewards",
-      [types.principal(holder), types.principal(position)],
-      this.deployer.address
-    );
+      [Cl.principal(holder), Cl.principal(position)],
+      this.deployer,
+    ).result;
   }
 
-  claimPendingRewardsMany(caller: Account, holders: any[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-v2",
-        "claim-pending-rewards-many",
-        [
-          types.list(
-            holders.map((holder) =>
-              types.tuple({
-                holder: types.principal(holder.holder),
-                position: types.principal(holder.position),
-              })
-            )
+  claimPendingRewardsMany(caller: string, holders: HolderPosition[]): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-v2",
+      "claim-pending-rewards-many",
+      [
+        Cl.list(
+          holders.map((h) =>
+            Cl.tuple({
+              holder: Cl.principal(h.holder),
+              position: Cl.principal(h.position),
+            }),
           ),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+        ),
+      ],
+      caller,
+    ).result;
   }
 
-  claimPendingRewards(caller: Account, holder: string, position: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-v2",
-        "claim-pending-rewards",
-        [types.principal(holder), types.principal(position)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  claimPendingRewards(caller: string, holder: string, position: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-v2",
+      "claim-pending-rewards",
+      [Cl.principal(holder), Cl.principal(position)],
+      caller,
+    ).result;
   }
 
-  withdrawTokens(caller: Account, recipient: string, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-v2",
-        "withdraw-tokens",
-        [types.principal(recipient), types.uint(amount * 100000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  withdrawTokens(caller: string, recipient: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-v2",
+      "withdraw-tokens",
+      [Cl.principal(recipient), Cl.uint(amount * 100_000_000)],
+      caller,
+    ).result;
   }
 
-  setClaimsEnabled(caller: Account, active: boolean) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-v2",
-        "set-claims-enabled",
-        [types.bool(active)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setClaimsEnabled(caller: string, active: boolean): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-v2",
+      "set-claims-enabled",
+      [Cl.bool(active)],
+      caller,
+    ).result;
   }
 
   setSupportedPositions(
-    caller: Account,
+    caller: string,
     position: string,
     active: boolean,
-    reserve: string
-  ) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-tracking-v2",
-        "set-supported-positions",
-        [
-          types.principal(position),
-          types.bool(active),
-          types.principal(reserve),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+    reserve: string,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-tracking-v2",
+      "set-supported-positions",
+      [Cl.principal(position), Cl.bool(active), Cl.principal(reserve)],
+      caller,
+    ).result;
   }
 }
-export { StStxBtcTracking };

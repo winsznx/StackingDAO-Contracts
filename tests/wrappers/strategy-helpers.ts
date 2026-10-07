@@ -1,463 +1,479 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { hexToBytes, qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
+import { qualifiedName } from "./tests-utils";
 
 // ---------------------------------------------------------
 // Strategy V0
 // ---------------------------------------------------------
 
-class StrategyV0 {
-  chain: Chain;
-  deployer: Account;
+export class StrategyV0 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getLastCyclePerformed() {
-    return this.chain.callReadOnlyFn("strategy-v0", "get-last-cycle-performed", [
-    ], this.deployer.address);
+  getLastCyclePerformed(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v0", "get-last-cycle-performed", [], this.deployer).result;
   }
 
-  getPoxRewardAddress() {
-    return this.chain.callReadOnlyFn("strategy-v0", "get-pox-reward-address", [
-    ], this.deployer.address);
+  getPoxRewardAddress(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v0", "get-pox-reward-address", [], this.deployer).result;
   }
 
-  getPoxCycle() {
-    return this.chain.callReadOnlyFn("strategy-v0", "get-pox-cycle", [
-    ], this.deployer.address);
+  getPoxCycle(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v0", "get-pox-cycle", [], this.deployer).result;
   }
 
-  getNextCycleStartBurnHeight() {
-    return this.chain.callReadOnlyFn("strategy-v0", "get-next-cycle-start-burn-height", [
-    ], this.deployer.address);
+  getNextCycleStartBurnHeight(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v0",
+      "get-next-cycle-start-burn-height",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getTotalStacking() {
-    return this.chain.callReadOnlyFn("strategy-v0", "get-total-stacking", [
-    ], this.deployer.address);
+  getTotalStacking(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v0", "get-total-stacking", [], this.deployer).result;
   }
 
-  getInflowOutflow() {
-    return this.chain.callReadOnlyFn("strategy-v0", "get-outflow-inflow", [
-    ], this.deployer.address);
+  getInflowOutflow(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v0", "get-outflow-inflow", [], this.deployer).result;
   }
 
-  stackersGetTotalStacking(stackerId: number) {
-    return this.chain.callReadOnlyFn("strategy-v0", "stackers-get-total-stacking", [
-      types.uint(stackerId)
-    ], this.deployer.address);
+  stackersGetTotalStacking(stackerId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v0",
+      "stackers-get-total-stacking",
+      [Cl.uint(stackerId)],
+      this.deployer,
+    ).result;
   }
 
-  setPoxRewardAddress(caller: Account, version: Uint8Array, hashbytes: Uint8Array) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v0", "set-pox-reward-address", [
-        types.tuple({
-          version: types.buff(version),
-          hashbytes: types.buff(hashbytes)
-        }),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setPoxRewardAddress(caller: string, version: Uint8Array, hashbytes: Uint8Array): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v0",
+      "set-pox-reward-address",
+      [Cl.tuple({ version: Cl.buffer(version), hashbytes: Cl.buffer(hashbytes) })],
+      caller,
+    ).result;
   }
 
-  performInflow(caller: Account, stackingAmounts: number[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v0", "perform-inflow", [
-        types.list(stackingAmounts.map(amount => types.uint(amount * 1000000)))
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  performInflow(caller: string, stackingAmounts: number[]): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v0",
+      "perform-inflow",
+      [Cl.list(stackingAmounts.map((a) => Cl.uint(a * 1_000_000)))],
+      caller,
+    ).result;
   }
 
-  performOutflow(caller: Account, stackersToStop: boolean[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v0", "perform-outflow", [
-        types.list(stackersToStop.map(stop => types.bool(stop)))
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  performOutflow(caller: string, stackersToStop: boolean[]): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v0",
+      "perform-outflow",
+      [Cl.list(stackersToStop.map((b) => Cl.bool(b)))],
+      caller,
+    ).result;
   }
 
-  stackersReturnStx(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v0", "stackers-return-stx", [
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  stackersReturnStx(caller: string): ClarityValue {
+    return simnet.callPublicFn("strategy-v0", "stackers-return-stx", [], caller).result;
   }
-
 }
-export { StrategyV0 };
 
 // ---------------------------------------------------------
 // Strategy V1
 // ---------------------------------------------------------
 
-class StrategyV1 {
-  chain: Chain;
-  deployer: Account;
+export class StrategyV1 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getLastCyclePerformed() {
-    return this.chain.callReadOnlyFn("strategy-v1", "get-last-cycle-performed", [
-    ], this.deployer.address);
+  getLastCyclePerformed(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v1", "get-last-cycle-performed", [], this.deployer).result;
   }
 
-  getPoxRewardAddress() {
-    return this.chain.callReadOnlyFn("strategy-v1", "get-pox-reward-address", [
-    ], this.deployer.address);
+  getPoxRewardAddress(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v1", "get-pox-reward-address", [], this.deployer).result;
   }
 
-  getPoxCycle() {
-    return this.chain.callReadOnlyFn("strategy-v1", "get-pox-cycle", [
-    ], this.deployer.address);
+  getPoxCycle(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v1", "get-pox-cycle", [], this.deployer).result;
   }
 
-  getNextCycleStartBurnHeight() {
-    return this.chain.callReadOnlyFn("strategy-v1", "get-next-cycle-start-burn-height", [
-    ], this.deployer.address);
+  getNextCycleStartBurnHeight(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v1",
+      "get-next-cycle-start-burn-height",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getStackingMinimum() {
-    return this.chain.callReadOnlyFn("strategy-v1", "get-stacking-minimum", [
-    ], this.deployer.address);
+  getStackingMinimum(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v1", "get-stacking-minimum", [], this.deployer).result;
   }
 
-  getPrepareCycleLength() {
-    return this.chain.callReadOnlyFn("strategy-v1", "get-prepare-cycle-length", [
-    ], this.deployer.address);
+  getPrepareCycleLength(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v1", "get-prepare-cycle-length", [], this.deployer).result;
   }
 
-  getTotalStacking() {
-    return this.chain.callReadOnlyFn("strategy-v1", "get-total-stacking", [
-    ], this.deployer.address);
+  getTotalStacking(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v1", "get-total-stacking", [], this.deployer).result;
   }
 
-  getInflowOutflow() {
-    return this.chain.callReadOnlyFn("strategy-v1", "get-outflow-inflow", [
-    ], this.deployer.address);
+  getInflowOutflow(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v1", "get-outflow-inflow", [], this.deployer).result;
   }
 
-  calculateInflow(inflow: number) {
-    return this.chain.callReadOnlyFn("strategy-v1", "calculate-inflow", [
-      types.uint(inflow * 1000000)
-    ], this.deployer.address);
+  calculateInflow(inflow: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v1",
+      "calculate-inflow",
+      [Cl.uint(inflow * 1_000_000)],
+      this.deployer,
+    ).result;
   }
 
-  calculateOutflow(outflow: number) {
-    return this.chain.callReadOnlyFn("strategy-v1", "calculate-outflow", [
-      types.uint(outflow * 1000000)
-    ], this.deployer.address);
+  calculateOutflow(outflow: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v1",
+      "calculate-outflow",
+      [Cl.uint(outflow * 1_000_000)],
+      this.deployer,
+    ).result;
   }
 
-  stackersGetTotalStacking(stackerId: number) {
-    return this.chain.callReadOnlyFn("strategy-v1", "stackers-get-total-stacking", [
-      types.uint(stackerId)
-    ], this.deployer.address);
+  stackersGetTotalStacking(stackerId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v1",
+      "stackers-get-total-stacking",
+      [Cl.uint(stackerId)],
+      this.deployer,
+    ).result;
   }
 
-  setPoxRewardAddress(caller: Account, version: Uint8Array, hashbytes: Uint8Array) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v1", "set-pox-reward-address", [
-        types.tuple({
-          version: types.buff(version),
-          hashbytes: types.buff(hashbytes)
-        }),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setPoxRewardAddress(caller: string, version: Uint8Array, hashbytes: Uint8Array): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v1",
+      "set-pox-reward-address",
+      [Cl.tuple({ version: Cl.buffer(version), hashbytes: Cl.buffer(hashbytes) })],
+      caller,
+    ).result;
   }
 
-  performStacking(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v1", "perform-stacking", [
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  performStacking(caller: string): ClarityValue {
+    return simnet.callPublicFn("strategy-v1", "perform-stacking", [], caller).result;
   }
 
-  performInflow(caller: Account, stackingAmounts: number[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v1", "perform-inflow", [
-        types.list(stackingAmounts.map(amount => types.uint(amount * 1000000)))
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  performInflow(caller: string, stackingAmounts: number[]): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v1",
+      "perform-inflow",
+      [Cl.list(stackingAmounts.map((a) => Cl.uint(a * 1_000_000)))],
+      caller,
+    ).result;
   }
 
-  performOutflow(caller: Account, stackersToStop: boolean[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v1", "perform-outflow", [
-        types.list(stackersToStop.map(stop => types.bool(stop)))
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  performOutflow(caller: string, stackersToStop: boolean[]): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v1",
+      "perform-outflow",
+      [Cl.list(stackersToStop.map((b) => Cl.bool(b)))],
+      caller,
+    ).result;
   }
 
-  stackersReturnStx(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v1", "stackers-return-stx", [
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  stackersReturnStx(caller: string): ClarityValue {
+    return simnet.callPublicFn("strategy-v1", "stackers-return-stx", [], caller).result;
   }
-
 }
-export { StrategyV1 };
 
 // ---------------------------------------------------------
 // Strategy V2
 // ---------------------------------------------------------
 
-class StrategyV2 {
-  chain: Chain;
-  deployer: Account;
+export class StrategyV2 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getTotalStacking() {
-    return this.chain.callReadOnlyFn("strategy-v2", "get-total-stacking", [
-    ], this.deployer.address);
+  getTotalStacking(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v2", "get-total-stacking", [], this.deployer).result;
   }
 
-  getInflowOutflow() {
-    return this.chain.callReadOnlyFn("strategy-v2", "get-outflow-inflow", [
-    ], this.deployer.address);
+  getInflowOutflow(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v2", "get-outflow-inflow", [], this.deployer).result;
   }
 
-  performPoolDelegation(caller: Account, pool: string, delegatesInfo: any[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v2", "perform-pool-delegation", [
-        types.principal(pool),
-        types.list(delegatesInfo.map(info => types.tuple({ delegate: types.principal(info.delegate), amount: types.uint(info.amount * 1000000) })))
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  performPoolDelegation(
+    caller: string,
+    pool: string,
+    delegatesInfo: { delegate: string; amount: number }[],
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v2",
+      "perform-pool-delegation",
+      [
+        Cl.principal(pool),
+        Cl.list(
+          delegatesInfo.map((info) =>
+            Cl.tuple({
+              delegate: Cl.principal(info.delegate),
+              amount: Cl.uint(info.amount * 1_000_000),
+            }),
+          ),
+        ),
+      ],
+      caller,
+    ).result;
   }
-
 }
-export { StrategyV2 };
 
 // ---------------------------------------------------------
 // Strategy V3
 // ---------------------------------------------------------
 
-class StrategyV3 {
-  chain: Chain;
-  deployer: Account;
+export class StrategyV3 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getCyclePreparedPools() {
-    return this.chain.callReadOnlyFn("strategy-v3", "get-cycle-prepared-pools", [
-    ], this.deployer.address);
+  getCyclePreparedPools(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v3", "get-cycle-prepared-pools", [], this.deployer).result;
   }
 
-  getPreparePoolsData(pool: string) {
-    return this.chain.callReadOnlyFn("strategy-v3", "get-prepare-pools-data", [
-      types.principal(pool),
-    ], this.deployer.address);
+  getPreparePoolsData(pool: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v3",
+      "get-prepare-pools-data",
+      [Cl.principal(pool)],
+      this.deployer,
+    ).result;
   }
 
-  getPrepareDelegatesData(delegate: string) {
-    return this.chain.callReadOnlyFn("strategy-v3", "get-prepare-delegates-data", [
-      types.principal(delegate),
-    ], this.deployer.address);
+  getPrepareDelegatesData(delegate: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v3",
+      "get-prepare-delegates-data",
+      [Cl.principal(delegate)],
+      this.deployer,
+    ).result;
   }
 
-  preparePools(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v3", "prepare-pools", [
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  preparePools(caller: string): ClarityValue {
+    return simnet.callPublicFn("strategy-v3", "prepare-pools", [], caller).result;
   }
 
-  prepareDelegates(caller: Account, pool: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v3", "prepare-delegates", [
-        types.principal(pool)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  prepareDelegates(caller: string, pool: string): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v3",
+      "prepare-delegates",
+      [Cl.principal(pool)],
+      caller,
+    ).result;
   }
 
-  execute(caller: Account, pool: string, delegates: string[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v3", "execute", [
-        types.principal(pool),
-        types.list(delegates.map(item => types.principal(item))),
-        types.principal(qualifiedName("reserve-v1")),
-        types.principal(qualifiedName("rewards-v2"))
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  execute(caller: string, pool: string, delegates: string[]): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v3",
+      "execute",
+      [
+        Cl.principal(pool),
+        Cl.list(delegates.map((d) => Cl.principal(d))),
+        Cl.principal(qualifiedName("reserve-v1")),
+        Cl.principal(qualifiedName("rewards-v2")),
+      ],
+      caller,
+    ).result;
   }
 
-  returnUnlockedStx(caller: Account, delegates: string[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v3", "return-unlocked-stx", [
-        types.list(delegates.map(item => types.principal(item))),
-        types.principal(qualifiedName("reserve-v1")),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  returnUnlockedStx(caller: string, delegates: string[]): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v3",
+      "return-unlocked-stx",
+      [
+        Cl.list(delegates.map((d) => Cl.principal(d))),
+        Cl.principal(qualifiedName("reserve-v1")),
+      ],
+      caller,
+    ).result;
   }
-
 }
-export { StrategyV3 };
 
 // ---------------------------------------------------------
 // Strategy V3 - Algo V1
 // ---------------------------------------------------------
 
-class StrategyV3AlgoV1 {
-  chain: Chain;
-  deployer: Account;
+export class StrategyV3AlgoV1 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  calculateLowestCombination(outflow: number, locked: number[]) {
-    return this.chain.callReadOnlyFn("strategy-v3-algo-v1", "calculate-lowest-combination", [
-      types.uint(outflow * 1000000),
-      types.list(locked.map(lock => types.uint(lock * 1000000)))
-    ], this.deployer.address);
+  calculateLowestCombination(outflow: number, locked: number[]): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v3-algo-v1",
+      "calculate-lowest-combination",
+      [
+        Cl.uint(outflow * 1_000_000),
+        Cl.list(locked.map((l) => Cl.uint(l * 1_000_000))),
+      ],
+      this.deployer,
+    ).result;
   }
 
-  calculateReachTarget(target: number[], locked: number[]) {
-    return this.chain.callReadOnlyFn("strategy-v3-algo-v1", "calculate-reach-target", [
-      types.list(target.map(item => types.uint(item * 1000000))),
-      types.list(locked.map(item => types.uint(item * 1000000)))
-    ], this.deployer.address);
+  calculateReachTarget(target: number[], locked: number[]): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v3-algo-v1",
+      "calculate-reach-target",
+      [
+        Cl.list(target.map((t) => Cl.uint(t * 1_000_000))),
+        Cl.list(locked.map((l) => Cl.uint(l * 1_000_000))),
+      ],
+      this.deployer,
+    ).result;
   }
-
 }
-export { StrategyV3AlgoV1 };
 
 // ---------------------------------------------------------
 // Strategy V3 - Pools V1
 // ---------------------------------------------------------
 
-class StrategyV3PoolsV1 {
-  chain: Chain;
-  deployer: Account;
+export class StrategyV3PoolsV1 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  calculateNewAmounts() {
-    return this.chain.callReadOnlyFn("strategy-v3-pools-v1", "calculate-new-amounts", [
-    ], this.deployer.address);
+  calculateNewAmounts(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v3-pools-v1",
+      "calculate-new-amounts",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  calculateStackingPerPool() {
-    return this.chain.callReadOnlyFn("strategy-v3-pools-v1", "calculate-stacking-per-pool", [
-    ], this.deployer.address);
+  calculateStackingPerPool(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v3-pools-v1",
+      "calculate-stacking-per-pool",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  calculateStackingTargetForPool(pool: string, newTotalNormalStacking: number, newTotalDirectStacking: number) {
-    return this.chain.callReadOnlyFn("strategy-v3-pools-v1", "calculate-stacking-target-for-pool", [
-      types.principal(pool),
-      types.uint(newTotalNormalStacking * 1000000),
-      types.uint(newTotalDirectStacking * 1000000),
-    ], this.deployer.address);
+  calculateStackingTargetForPool(
+    pool: string,
+    newTotalNormalStacking: number,
+    newTotalDirectStacking: number,
+  ): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v3-pools-v1",
+      "calculate-stacking-target-for-pool",
+      [
+        Cl.principal(pool),
+        Cl.uint(newTotalNormalStacking * 1_000_000),
+        Cl.uint(newTotalDirectStacking * 1_000_000),
+      ],
+      this.deployer,
+    ).result;
   }
-
 }
-export { StrategyV3PoolsV1 };
 
 // ---------------------------------------------------------
 // Strategy V3 - Delegates V1
 // ---------------------------------------------------------
 
-class StrategyV3DelegatesV1 {
-  chain: Chain;
-  deployer: Account;
+export class StrategyV3DelegatesV1 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  calculateStackingPerDelegate(pool: string, totalToStack: number) {
-    return this.chain.callReadOnlyFn("strategy-v3-delegates-v1", "calculate-stacking-per-delegate", [
-      types.principal(pool),
-      types.uint(totalToStack * 1000000)
-    ], this.deployer.address);
+  calculateStackingPerDelegate(pool: string, totalToStack: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v3-delegates-v1",
+      "calculate-stacking-per-delegate",
+      [Cl.principal(pool), Cl.uint(totalToStack * 1_000_000)],
+      this.deployer,
+    ).result;
   }
 
-  calculateLockedForPool(pool: string) {
-    return this.chain.callReadOnlyFn("strategy-v3-delegates-v1", "calculate-locked-for-pool", [
-      types.principal(pool),
-    ], this.deployer.address);
+  calculateLockedForPool(pool: string): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "strategy-v3-delegates-v1",
+      "calculate-locked-for-pool",
+      [Cl.principal(pool)],
+      this.deployer,
+    ).result;
   }
-
 }
-export { StrategyV3DelegatesV1 };
-
 
 // ---------------------------------------------------------
 // Strategy V4
 // ---------------------------------------------------------
 
-class StrategyV4 {
-  chain: Chain;
-  deployer: Account;
+export class StrategyV4 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getManager() {
-    return this.chain.callReadOnlyFn("strategy-v4", "get-manager", [
-    ], this.deployer.address);
+  getManager(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v4", "get-manager", [], this.deployer).result;
   }
 
-  getTotalStacking() {
-    return this.chain.callReadOnlyFn("strategy-v4", "get-total-stacking", [
-    ], this.deployer.address);
+  getTotalStacking(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v4", "get-total-stacking", [], this.deployer).result;
   }
 
-  getInflowOutflow() {
-    return this.chain.callReadOnlyFn("strategy-v4", "get-outflow-inflow", [
-    ], this.deployer.address);
+  getInflowOutflow(): ClarityValue {
+    return simnet.callReadOnlyFn("strategy-v4", "get-outflow-inflow", [], this.deployer).result;
   }
 
-  performPoolDelegation(caller: Account, pool: string, delegatesInfo: any[]) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v4", "perform-pool-delegation", [
-        types.principal(pool),
-        types.list(delegatesInfo.map(info => types.tuple({ delegate: types.principal(info.delegate), amount: types.uint(info.amount * 1000000) })))
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  performPoolDelegation(
+    caller: string,
+    pool: string,
+    delegatesInfo: { delegate: string; amount: number }[],
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v4",
+      "perform-pool-delegation",
+      [
+        Cl.principal(pool),
+        Cl.list(
+          delegatesInfo.map((info) =>
+            Cl.tuple({
+              delegate: Cl.principal(info.delegate),
+              amount: Cl.uint(info.amount * 1_000_000),
+            }),
+          ),
+        ),
+      ],
+      caller,
+    ).result;
   }
 
-  setManager(caller: Account, manager: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("strategy-v4", "set-manager", [
-        types.principal(manager),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setManager(caller: string, manager: string): ClarityValue {
+    return simnet.callPublicFn(
+      "strategy-v4",
+      "set-manager",
+      [Cl.principal(manager)],
+      caller,
+    ).result;
   }
 }
-export { StrategyV4 };

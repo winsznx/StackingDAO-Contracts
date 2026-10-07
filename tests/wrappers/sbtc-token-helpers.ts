@@ -1,117 +1,74 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "./tests-utils.ts";
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // sBTC token
 // ---------------------------------------------------------
 
-class SBtcToken {
-  chain: Chain;
-  deployer: Account;
+export class SBtcToken {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getTotalSupply() {
-    return this.chain.callReadOnlyFn(
-      "sbtc-token",
-      "get-total-supply",
-      [],
-      this.deployer.address
-    );
+  getTotalSupply(): ClarityValue {
+    return simnet.callReadOnlyFn("sbtc-token", "get-total-supply", [], this.deployer).result;
   }
 
-  getName() {
-    return this.chain.callReadOnlyFn(
-      "sbtc-token",
-      "get-name",
-      [],
-      this.deployer.address
-    );
+  getName(): ClarityValue {
+    return simnet.callReadOnlyFn("sbtc-token", "get-name", [], this.deployer).result;
   }
 
-  getSymbol() {
-    return this.chain.callReadOnlyFn(
-      "sbtc-token",
-      "get-symbol",
-      [],
-      this.deployer.address
-    );
+  getSymbol(): ClarityValue {
+    return simnet.callReadOnlyFn("sbtc-token", "get-symbol", [], this.deployer).result;
   }
 
-  getDecimals() {
-    return this.chain.callReadOnlyFn(
-      "sbtc-token",
-      "get-decimals",
-      [],
-      this.deployer.address
-    );
+  getDecimals(): ClarityValue {
+    return simnet.callReadOnlyFn("sbtc-token", "get-decimals", [], this.deployer).result;
   }
 
-  getBalance(account: string) {
-    return this.chain.callReadOnlyFn(
+  getBalance(account: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "sbtc-token",
       "get-balance",
-      [types.principal(account)],
-      this.deployer.address
-    );
+      [Cl.principal(account)],
+      this.deployer,
+    ).result;
   }
 
-  getTokenUri() {
-    return this.chain.callReadOnlyFn(
+  getTokenUri(): ClarityValue {
+    return simnet.callReadOnlyFn("sbtc-token", "get-token-uri", [], this.deployer).result;
+  }
+
+  transfer(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
       "sbtc-token",
-      "get-token-uri",
-      [],
-      this.deployer.address
-    );
+      "transfer",
+      [
+        Cl.uint(BigInt(amount) * 100_000_000n),
+        Cl.principal(caller),
+        Cl.principal(receiver),
+        Cl.none(),
+      ],
+      caller,
+    ).result;
   }
 
-  transfer(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "sbtc-token",
-        "transfer",
-        [
-          types.uint(amount * 100000000),
-          types.principal(caller.address),
-          types.principal(receiver),
-          types.none(),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  protocolMint(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "sbtc-token",
+      "protocol-mint",
+      [Cl.uint(BigInt(amount) * 100_000_000n), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  protocolMint(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "sbtc-token",
-        "protocol-mint",
-        [types.uint(amount * 100000000), types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
-  }
-
-  protocolBurn(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "sbtc-token",
-        "protocol-burn",
-        [types.uint(amount * 100000000), types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  protocolBurn(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "sbtc-token",
+      "protocol-burn",
+      [Cl.uint(BigInt(amount) * 100_000_000n), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 }
-export { SBtcToken };

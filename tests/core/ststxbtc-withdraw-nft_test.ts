@@ -1,316 +1,196 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
-qualifiedName("");
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { StStxBtcWithdrawNft } from "../wrappers/ststxbtc-withdraw-nft-helpers.ts";
+import { qualifiedName, uintWithDecimals } from "../wrappers/tests-utils";
+import { StStxBtcWithdrawNft } from "../wrappers/ststxbtc-withdraw-nft-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
 
 //-------------------------------------
 // Getters
 //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-withdraw-nft: can get token info",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+describe("ststxbtc-withdraw-nft", () => {
+  it("ststxbtc-withdraw-nft: can get token info", () => {
+    const stStxBtcWithdrawNft = new StStxBtcWithdrawNft(deployer);
 
-    let stStxBtcWithdrawNft = new StStxBtcWithdrawNft(chain, deployer);
+    expect(stStxBtcWithdrawNft.getBaseUri()).toBeAscii("ipfs://");
 
-    let call = await stStxBtcWithdrawNft.getBaseUri();
-    call.result.expectAscii("ipfs://");
+    expect(stStxBtcWithdrawNft.getLastTokenId()).toBeOk(Cl.uint(0));
 
-    call = await stStxBtcWithdrawNft.getLastTokenId();
-    call.result.expectOk().expectUint(0);
+    expect(stStxBtcWithdrawNft.getOwner(69)).toBeOk(Cl.none());
 
-    call = await stStxBtcWithdrawNft.getOwner(69);
-    call.result.expectOk().expectNone();
-
-    call = await stStxBtcWithdrawNft.getTokenUri(420);
-    call.result.expectOk().expectSome().expectAscii("ipfs://420.json");
-  },
-});
-
-//-------------------------------------
-// Mint / Burn
-//-------------------------------------
-
-Clarinet.test({
-  name: "ststxbtc-withdraw-nft: can mint/burn as protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let stStxBtcWithdrawNft = new StStxBtcWithdrawNft(chain, deployer);
-
-    let call = await stStxBtcWithdrawNft.getLastTokenId();
-    call.result.expectOk().expectUint(0);
-
-    call = await stStxBtcWithdrawNft.getOwner(0);
-    call.result.expectOk().expectNone();
-
-    let result = await stStxBtcWithdrawNft.mintForProtocol(
-      deployer,
-      wallet_1.address
+    expect(stStxBtcWithdrawNft.getTokenUri(420)).toBeOk(
+      Cl.some(Cl.stringAscii("ipfs://420.json")),
     );
-    result.expectOk().expectBool(true);
+  });
 
-    call = await stStxBtcWithdrawNft.getLastTokenId();
-    call.result.expectOk().expectUint(1);
+  //-------------------------------------
+  // Mint / Burn
+  //-------------------------------------
 
-    call = await stStxBtcWithdrawNft.getOwner(0);
-    call.result.expectOk().expectSome().expectPrincipal(wallet_1.address);
+  it("ststxbtc-withdraw-nft: can mint/burn as protocol", () => {
+    const stStxBtcWithdrawNft = new StStxBtcWithdrawNft(deployer);
 
-    result = await stStxBtcWithdrawNft.burnForProtocol(deployer, 0);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcWithdrawNft.getLastTokenId()).toBeOk(Cl.uint(0));
 
-    call = await stStxBtcWithdrawNft.getLastTokenId();
-    call.result.expectOk().expectUint(1);
+    expect(stStxBtcWithdrawNft.getOwner(0)).toBeOk(Cl.none());
 
-    call = await stStxBtcWithdrawNft.getOwner(1);
-    call.result.expectOk().expectNone();
-  },
-});
+    expect(stStxBtcWithdrawNft.mintForProtocol(deployer, wallet_1)).toBeOk(Cl.bool(true));
 
-//-------------------------------------
-// Transfer
-//-------------------------------------
+    expect(stStxBtcWithdrawNft.getLastTokenId()).toBeOk(Cl.uint(1));
 
-Clarinet.test({
-  name: "ststxbtc-withdraw-nft: can transfer token",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+    expect(stStxBtcWithdrawNft.getOwner(0)).toBeOk(Cl.some(Cl.principal(wallet_1)));
 
-    let stStxBtcWithdrawNft = new StStxBtcWithdrawNft(chain, deployer);
+    expect(stStxBtcWithdrawNft.burnForProtocol(deployer, 0)).toBeOk(Cl.bool(true));
 
-    let call = await stStxBtcWithdrawNft.getBalance(wallet_1.address);
-    call.result.expectUint(0);
+    expect(stStxBtcWithdrawNft.getLastTokenId()).toBeOk(Cl.uint(1));
 
-    let result = await stStxBtcWithdrawNft.mintForProtocol(
-      deployer,
-      wallet_1.address
+    expect(stStxBtcWithdrawNft.getOwner(1)).toBeOk(Cl.none());
+  });
+
+  //-------------------------------------
+  // Transfer
+  //-------------------------------------
+
+  it("ststxbtc-withdraw-nft: can transfer token", () => {
+    const stStxBtcWithdrawNft = new StStxBtcWithdrawNft(deployer);
+
+    expect(stStxBtcWithdrawNft.getBalance(wallet_1)).toBeUint(0);
+
+    expect(stStxBtcWithdrawNft.mintForProtocol(deployer, wallet_1)).toBeOk(Cl.bool(true));
+
+    expect(stStxBtcWithdrawNft.getBalance(wallet_1)).toBeUint(1);
+
+    expect(stStxBtcWithdrawNft.getBalance(wallet_2)).toBeUint(0);
+
+    expect(stStxBtcWithdrawNft.transfer(wallet_1, 0, wallet_2)).toBeOk(Cl.bool(true));
+
+    expect(stStxBtcWithdrawNft.getBalance(wallet_1)).toBeUint(0);
+
+    expect(stStxBtcWithdrawNft.getBalance(wallet_2)).toBeUint(1);
+
+    expect(stStxBtcWithdrawNft.getLastTokenId()).toBeOk(Cl.uint(1));
+
+    expect(stStxBtcWithdrawNft.getOwner(0)).toBeOk(Cl.some(Cl.principal(wallet_2)));
+  });
+
+  //-------------------------------------
+  // Marketplace
+  //-------------------------------------
+
+  it("ststxbtc-withdraw-nft: can list/unlist and buy on marketplace", () => {
+    const stStxBtcWithdrawNft = new StStxBtcWithdrawNft(deployer);
+
+    expect(stStxBtcWithdrawNft.mintForProtocol(deployer, wallet_1)).toBeOk(Cl.bool(true));
+
+    expect(stStxBtcWithdrawNft.listInUstx(wallet_1, 0, 10)).toBeOk(Cl.bool(true));
+
+    expect(stStxBtcWithdrawNft.getListingInUstx(0)).toBeSome(
+      Cl.tuple({
+        commission: Cl.principal(qualifiedName("marketplace-commission")),
+        price: uintWithDecimals(10),
+      }),
     );
-    result.expectOk().expectBool(true);
-
-    call = await stStxBtcWithdrawNft.getBalance(wallet_1.address);
-    call.result.expectUint(1);
-
-    call = await stStxBtcWithdrawNft.getBalance(wallet_2.address);
-    call.result.expectUint(0);
-
-    result = await stStxBtcWithdrawNft.transfer(wallet_1, 0, wallet_2.address);
-    result.expectOk().expectBool(true);
-
-    call = await stStxBtcWithdrawNft.getBalance(wallet_1.address);
-    call.result.expectUint(0);
-
-    call = await stStxBtcWithdrawNft.getBalance(wallet_2.address);
-    call.result.expectUint(1);
-
-    call = await stStxBtcWithdrawNft.getLastTokenId();
-    call.result.expectOk().expectUint(1);
-
-    call = await stStxBtcWithdrawNft.getOwner(0);
-    call.result.expectOk().expectSome().expectPrincipal(wallet_2.address);
-  },
-});
-
-//-------------------------------------
-// Marketplace
-//-------------------------------------
-
-Clarinet.test({
-  name: "ststxbtc-withdraw-nft: can list/unlist and buy on marketplace",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-
-    let stStxBtcWithdrawNft = new StStxBtcWithdrawNft(chain, deployer);
-
-    let result = await stStxBtcWithdrawNft.mintForProtocol(
-      deployer,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
-
-    result = await stStxBtcWithdrawNft.listInUstx(wallet_1, 0, 10);
-    result.expectOk().expectBool(true);
-
-    let call = await stStxBtcWithdrawNft.getListingInUstx(0);
-    call.result
-      .expectSome()
-      .expectTuple()
-      ["commission"].expectPrincipal(qualifiedName("marketplace-commission"));
-    call.result.expectSome().expectTuple()["price"].expectUintWithDecimals(10);
 
     // Can not transfer while listed
-    result = await stStxBtcWithdrawNft.transfer(wallet_1, 0, wallet_2.address);
-    result.expectErr().expectUint(1106);
+    expect(stStxBtcWithdrawNft.transfer(wallet_1, 0, wallet_2)).toBeErr(Cl.uint(1106));
 
-    result = await stStxBtcWithdrawNft.unlistInUstx(wallet_1, 0);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcWithdrawNft.unlistInUstx(wallet_1, 0)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcWithdrawNft.getListingInUstx(0);
-    call.result.expectNone();
+    expect(stStxBtcWithdrawNft.getListingInUstx(0)).toBeNone();
 
-    result = await stStxBtcWithdrawNft.listInUstx(wallet_1, 0, 20);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcWithdrawNft.listInUstx(wallet_1, 0, 20)).toBeOk(Cl.bool(true));
 
-    result = await stStxBtcWithdrawNft.buyInUstx(deployer, 0);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcWithdrawNft.buyInUstx(deployer, 0)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcWithdrawNft.getListingInUstx(0);
-    call.result.expectNone();
+    expect(stStxBtcWithdrawNft.getListingInUstx(0)).toBeNone();
 
-    call = await stStxBtcWithdrawNft.getBalance(deployer.address);
-    call.result.expectUint(1);
-  },
-});
+    expect(stStxBtcWithdrawNft.getBalance(deployer)).toBeUint(1);
+  });
 
-Clarinet.test({
-  name: "ststxbtc-withdraw-nft: will unlist on burn",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+  it("ststxbtc-withdraw-nft: will unlist on burn", () => {
+    const stStxBtcWithdrawNft = new StStxBtcWithdrawNft(deployer);
 
-    let stStxBtcWithdrawNft = new StStxBtcWithdrawNft(chain, deployer);
+    expect(stStxBtcWithdrawNft.mintForProtocol(deployer, wallet_1)).toBeOk(Cl.bool(true));
 
-    let result = await stStxBtcWithdrawNft.mintForProtocol(
-      deployer,
-      wallet_1.address
+    expect(stStxBtcWithdrawNft.listInUstx(wallet_1, 0, 10)).toBeOk(Cl.bool(true));
+
+    expect(stStxBtcWithdrawNft.getListingInUstx(0)).toBeSome(
+      Cl.tuple({
+        commission: Cl.principal(qualifiedName("marketplace-commission")),
+        price: uintWithDecimals(10),
+      }),
     );
-    result.expectOk().expectBool(true);
-
-    result = await stStxBtcWithdrawNft.listInUstx(wallet_1, 0, 10);
-    result.expectOk().expectBool(true);
-
-    let call = await stStxBtcWithdrawNft.getListingInUstx(0);
-    call.result
-      .expectSome()
-      .expectTuple()
-      ["commission"].expectPrincipal(qualifiedName("marketplace-commission"));
-    call.result.expectSome().expectTuple()["price"].expectUintWithDecimals(10);
 
     // Can not transfer while listed
-    result = await stStxBtcWithdrawNft.burnForProtocol(deployer, 0);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcWithdrawNft.burnForProtocol(deployer, 0)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcWithdrawNft.getListingInUstx(0);
-    call.result.expectNone();
-  },
-});
+    expect(stStxBtcWithdrawNft.getListingInUstx(0)).toBeNone();
+  });
 
-//-------------------------------------
-// Admin
-//-------------------------------------
+  //-------------------------------------
+  // Admin
+  //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-withdraw-nft: can set base URI",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("ststxbtc-withdraw-nft: can set base URI", () => {
+    const stStxBtcWithdrawNft = new StStxBtcWithdrawNft(deployer);
 
-    let stStxBtcWithdrawNft = new StStxBtcWithdrawNft(chain, deployer);
+    expect(stStxBtcWithdrawNft.getBaseUri()).toBeAscii("ipfs://");
 
-    let call = await stStxBtcWithdrawNft.getBaseUri();
-    call.result.expectAscii("ipfs://");
+    expect(stStxBtcWithdrawNft.getTokenUri(420)).toBeOk(
+      Cl.some(Cl.stringAscii("ipfs://420.json")),
+    );
 
-    call = await stStxBtcWithdrawNft.getTokenUri(420);
-    call.result.expectOk().expectSome().expectAscii("ipfs://420.json");
+    expect(stStxBtcWithdrawNft.setBaseUri(deployer, "ipfs://123/")).toBeOk(Cl.bool(true));
 
-    let result = await stStxBtcWithdrawNft.setBaseUri(deployer, "ipfs://123/");
-    result.expectOk().expectBool(true);
+    expect(stStxBtcWithdrawNft.getBaseUri()).toBeAscii("ipfs://123/");
 
-    call = await stStxBtcWithdrawNft.getBaseUri();
-    call.result.expectAscii("ipfs://123/");
+    expect(stStxBtcWithdrawNft.getTokenUri(420)).toBeOk(
+      Cl.some(Cl.stringAscii("ipfs://123/420.json")),
+    );
+  });
 
-    call = await stStxBtcWithdrawNft.getTokenUri(420);
-    call.result.expectOk().expectSome().expectAscii("ipfs://123/420.json");
-  },
-});
+  //-------------------------------------
+  // Error
+  //-------------------------------------
 
-//-------------------------------------
-// Error
-//-------------------------------------
+  it("ststxbtc-withdraw-nft: can not transfer is sender is not tx-sender", () => {
+    const stStxBtcWithdrawNft = new StStxBtcWithdrawNft(deployer);
 
-Clarinet.test({
-  name: "ststxbtc-withdraw-nft: can not transfer is sender is not tx-sender",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+    expect(stStxBtcWithdrawNft.mintForProtocol(deployer, deployer)).toBeOk(Cl.bool(true));
 
-    let stStxBtcWithdrawNft = new StStxBtcWithdrawNft(chain, deployer);
-
-    let result = await stStxBtcWithdrawNft.mintForProtocol(
+    const { result } = simnet.callPublicFn(
+      "ststx-withdraw-nft",
+      "transfer",
+      [Cl.uint(0), Cl.principal(wallet_1), Cl.principal(wallet_2)],
       deployer,
-      deployer.address
     );
-    result.expectOk().expectBool(true);
+    expect(result).toBeErr(Cl.uint(1101));
+  });
 
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "ststx-withdraw-nft",
-        "transfer",
-        [
-          types.uint(0),
-          types.principal(wallet_1.address),
-          types.principal(wallet_2.address),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(1101);
-  },
-});
+  it("ststxbtc-withdraw-nft: can not burn NFT for which no owner found", () => {
+    const stStxBtcWithdrawNft = new StStxBtcWithdrawNft(deployer);
 
-Clarinet.test({
-  name: "ststxbtc-withdraw-nft: can not burn NFT for which no owner found",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(stStxBtcWithdrawNft.burnForProtocol(deployer, 10)).toBeErr(Cl.uint(1107));
+  });
 
-    let stStxBtcWithdrawNft = new StStxBtcWithdrawNft(chain, deployer);
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-    let result = await stStxBtcWithdrawNft.burnForProtocol(deployer, 10);
-    result.expectErr().expectUint(1107);
-  },
-});
+  it("ststxbtc-withdraw-nft: only protocol can set base URI, mint and burn for protocol", () => {
+    const stStxBtcWithdrawNft = new StStxBtcWithdrawNft(deployer);
 
-//-------------------------------------
-// Access
-//-------------------------------------
+    expect(stStxBtcWithdrawNft.mintForProtocol(deployer, deployer)).toBeOk(Cl.bool(true));
 
-Clarinet.test({
-  name: "ststxbtc-withdraw-nft: only protocol can set base URI, mint and burn for protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    expect(stStxBtcWithdrawNft.setBaseUri(wallet_1, "test-uri")).toBeErr(Cl.uint(20003));
 
-    let stStxBtcWithdrawNft = new StStxBtcWithdrawNft(chain, deployer);
+    expect(stStxBtcWithdrawNft.mintForProtocol(wallet_1, wallet_1)).toBeErr(Cl.uint(20003));
 
-    let result = await stStxBtcWithdrawNft.mintForProtocol(
-      deployer,
-      deployer.address
-    );
-    result.expectOk().expectBool(true);
-
-    result = await stStxBtcWithdrawNft.setBaseUri(wallet_1, "test-uri");
-    result.expectErr().expectUint(20003);
-
-    result = await stStxBtcWithdrawNft.mintForProtocol(
-      wallet_1,
-      wallet_1.address
-    );
-    result.expectErr().expectUint(20003);
-
-    result = await stStxBtcWithdrawNft.burnForProtocol(wallet_1, 0);
-    result.expectErr().expectUint(20003);
-  },
+    expect(stStxBtcWithdrawNft.burnForProtocol(wallet_1, 0)).toBeErr(Cl.uint(20003));
+  });
 });

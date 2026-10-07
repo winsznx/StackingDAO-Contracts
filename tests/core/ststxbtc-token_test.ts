@@ -1,297 +1,178 @@
-import {
-  Account,
-  Chain,
-  Clarinet,
-  Tx,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from "../wrappers/tests-utils.ts";
-qualifiedName("");
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { StStxBtcToken } from "../wrappers/ststxbtc-token-helpers.ts";
-import { StStxBtcTracking } from "../wrappers/ststxbtc-tracking-helpers.ts";
-import { StStxBtcTrackingData } from "../wrappers/ststxbtc-tracking-data-helpers.ts";
+import { uintWithDecimals } from "../wrappers/tests-utils";
+import { StStxBtcToken } from "../wrappers/ststxbtc-token-helpers";
+import { StStxBtcTracking } from "../wrappers/ststxbtc-tracking-helpers";
+import { StStxBtcTrackingData } from "../wrappers/ststxbtc-tracking-data-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
+const wallet_2 = accounts.get("wallet_2")!;
 
 //-------------------------------------
 // Getters
 //-------------------------------------
 
-Clarinet.test({
-  name: "ststxbtc-token: can get token info",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+describe("ststxbtc-token", () => {
+  it("ststxbtc-token: can get token info", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
+    expect(stStxBtcToken.getTotalSupply()).toBeOk(uintWithDecimals(0));
 
-    let call = await stStxBtcToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(stStxBtcToken.getName()).toBeOk(Cl.stringAscii("Stacked STX BTC Token"));
 
-    call = await stStxBtcToken.getName();
-    call.result.expectOk().expectAscii("Stacked STX BTC Token");
+    expect(stStxBtcToken.getSymbol()).toBeOk(Cl.stringAscii("stSTXbtc"));
 
-    call = await stStxBtcToken.getSymbol();
-    call.result.expectOk().expectAscii("stSTXbtc");
+    expect(stStxBtcToken.getDecimals()).toBeOk(Cl.uint(6));
 
-    call = await stStxBtcToken.getDecimals();
-    call.result.expectOk().expectUint(6);
+    expect(stStxBtcToken.getBalance(deployer)).toBeOk(uintWithDecimals(0));
 
-    call = await stStxBtcToken.getBalance(deployer.address);
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(stStxBtcToken.getTokenUri()).toBeOk(Cl.some(Cl.stringUtf8("")));
+  });
 
-    call = await stStxBtcToken.getTokenUri();
-    call.result.expectOk().expectSome().expectUtf8("");
-  },
-});
+  //-------------------------------------
+  // Core
+  //-------------------------------------
 
-//-------------------------------------
-// Core
-//-------------------------------------
+  it("ststxbtc-token: can mint/burn as protocol", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-Clarinet.test({
-  name: "ststxbtc-token: can mint/burn as protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    expect(stStxBtcToken.getTotalSupply()).toBeOk(uintWithDecimals(0));
 
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
+    expect(stStxBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(0));
 
-    let call = await stStxBtcToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(stStxBtcToken.mintForProtocol(deployer, 100, wallet_1)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(0);
+    expect(stStxBtcToken.getTotalSupply()).toBeOk(uintWithDecimals(100));
 
-    let result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      100,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(100));
 
-    call = await stStxBtcToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(100);
+    expect(stStxBtcToken.burnForProtocol(deployer, 20, wallet_1)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(100);
+    expect(stStxBtcToken.getTotalSupply()).toBeOk(uintWithDecimals(80));
 
-    result = await stStxBtcToken.burnForProtocol(
-      deployer,
-      20,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(80));
 
-    call = await stStxBtcToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(80);
+    expect(stStxBtcToken.burn(wallet_1, 30)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(80);
+    expect(stStxBtcToken.getTotalSupply()).toBeOk(uintWithDecimals(50));
 
-    result = await stStxBtcToken.burn(wallet_1, 30);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(50));
+  });
 
-    call = await stStxBtcToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(50);
+  it("ststxbtc-token: can transfer token", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-    call = await stStxBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(50);
-  },
-});
+    expect(stStxBtcToken.mintForProtocol(deployer, 100, wallet_1)).toBeOk(Cl.bool(true));
 
-Clarinet.test({
-  name: "ststxbtc-token: can transfer token",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
+    expect(stStxBtcToken.transfer(wallet_1, 20, wallet_2)).toBeOk(Cl.bool(true));
 
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
+    expect(stStxBtcToken.getTotalSupply()).toBeOk(uintWithDecimals(100));
 
-    let result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      100,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.getBalance(wallet_1)).toBeOk(uintWithDecimals(80));
 
-    result = await stStxBtcToken.transfer(wallet_1, 20, wallet_2.address);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.getBalance(wallet_2)).toBeOk(uintWithDecimals(20));
+  });
 
-    let call = await stStxBtcToken.getTotalSupply();
-    call.result.expectOk().expectUintWithDecimals(100);
+  //-------------------------------------
+  // Tracking
+  //-------------------------------------
 
-    call = await stStxBtcToken.getBalance(wallet_1.address);
-    call.result.expectOk().expectUintWithDecimals(80);
-
-    call = await stStxBtcToken.getBalance(wallet_2.address);
-    call.result.expectOk().expectUintWithDecimals(20);
-  },
-});
-
-//-------------------------------------
-// Tracking
-//-------------------------------------
-
-Clarinet.test({
-  name: "ststxbtc-token: token mint/burn/transfer updates tracking",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-    let stStxBtcTracking = new StStxBtcTracking(chain, deployer);
-    let stStxBtcTrackingData = new StStxBtcTrackingData(chain, deployer);
+  it("ststxbtc-token: token mint/burn/transfer updates tracking", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+    const stStxBtcTrackingData = new StStxBtcTrackingData(deployer);
 
     // Mint for protocol
-    let result = await stStxBtcToken.mintForProtocol(
-      deployer,
-      100,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(deployer, 100, wallet_1)).toBeOk(Cl.bool(true));
 
-    let call = await stStxBtcTrackingData.getTotalSupply();
-    call.result.expectUintWithDecimals(100);
+    expect(stStxBtcTrackingData.getTotalSupply()).toBeUint(100 * 1_000_000);
 
-    call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_1.address,
-      wallet_1.address
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(100);
-    call.result.expectTuple()["cumm-reward"].expectUintWithDecimals(0);
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_1, wallet_1)).toBeTuple({
+      amount: uintWithDecimals(100),
+      "cumm-reward": uintWithDecimals(0),
+    });
 
     // Burn for protocol
-    result = await stStxBtcToken.burnForProtocol(
-      deployer,
-      20,
-      wallet_1.address
-    );
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.burnForProtocol(deployer, 20, wallet_1)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTrackingData.getTotalSupply();
-    call.result.expectUintWithDecimals(100 - 20);
+    expect(stStxBtcTrackingData.getTotalSupply()).toBeUint((100 - 20) * 1_000_000);
 
-    call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_1.address,
-      wallet_1.address
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(100 - 20);
-    call.result.expectTuple()["cumm-reward"].expectUintWithDecimals(0);
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_1, wallet_1)).toBeTuple({
+      amount: uintWithDecimals(100 - 20),
+      "cumm-reward": uintWithDecimals(0),
+    });
 
     // Burn
-    result = await stStxBtcToken.burn(wallet_1, 30);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.burn(wallet_1, 30)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTrackingData.getTotalSupply();
-    call.result.expectUintWithDecimals(100 - 20 - 30);
+    expect(stStxBtcTrackingData.getTotalSupply()).toBeUint((100 - 20 - 30) * 1_000_000);
 
-    call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_1.address,
-      wallet_1.address
-    );
-    call.result.expectTuple()["amount"].expectUintWithDecimals(100 - 20 - 30);
-    call.result.expectTuple()["cumm-reward"].expectUintWithDecimals(0);
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_1, wallet_1)).toBeTuple({
+      amount: uintWithDecimals(100 - 20 - 30),
+      "cumm-reward": uintWithDecimals(0),
+    });
 
     // Transfer
-    result = await stStxBtcToken.transfer(wallet_1, 10, deployer.address);
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.transfer(wallet_1, 10, deployer)).toBeOk(Cl.bool(true));
 
-    call = await stStxBtcTrackingData.getTotalSupply();
-    call.result.expectUintWithDecimals(100 - 20 - 30);
+    expect(stStxBtcTrackingData.getTotalSupply()).toBeUint((100 - 20 - 30) * 1_000_000);
 
-    call = await stStxBtcTrackingData.getHolderPosition(
-      wallet_1.address,
-      wallet_1.address
+    expect(stStxBtcTrackingData.getHolderPosition(wallet_1, wallet_1)).toBeTuple({
+      amount: uintWithDecimals(100 - 20 - 30 - 10),
+      "cumm-reward": uintWithDecimals(0),
+    });
+  });
+
+  //-------------------------------------
+  // Admin
+  //-------------------------------------
+
+  it("ststxbtc-token: can set token URI", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+
+    expect(stStxBtcToken.getTokenUri()).toBeOk(Cl.some(Cl.stringUtf8("")));
+
+    expect(stStxBtcToken.setTokenUri(deployer, "test-uri")).toBeOk(Cl.bool(true));
+
+    expect(stStxBtcToken.getTokenUri()).toBeOk(Cl.some(Cl.stringUtf8("test-uri")));
+  });
+
+  //-------------------------------------
+  // Error
+  //-------------------------------------
+
+  it("ststxbtc-token: can not transfer is sender is not tx-sender, or sender has not enough", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
+
+    const { result } = simnet.callPublicFn(
+      "ststxbtc-token",
+      "transfer",
+      [
+        Cl.uint(100 * 1_000_000),
+        Cl.principal(wallet_1),
+        Cl.principal(wallet_2),
+        Cl.none(),
+      ],
+      deployer,
     );
-    call.result
-      .expectTuple()
-      ["amount"].expectUintWithDecimals(100 - 20 - 30 - 10);
-    call.result.expectTuple()["cumm-reward"].expectUintWithDecimals(0);
-  },
-});
+    expect(result).toBeErr(Cl.uint(1401));
 
-//-------------------------------------
-// Admin
-//-------------------------------------
+    expect(stStxBtcToken.transfer(wallet_1, 20, wallet_1)).toBeErr(Cl.uint(2));
+  });
 
-Clarinet.test({
-  name: "ststxbtc-token: can set token URI",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
+  it("ststxbtc-token: only protocol can set token URI, mint and burn for protocol", () => {
+    const stStxBtcToken = new StStxBtcToken(deployer);
 
-    let call = await stStxBtcToken.getTokenUri();
-    call.result.expectOk().expectSome().expectUtf8("");
+    expect(stStxBtcToken.setTokenUri(wallet_1, "test-uri")).toBeErr(Cl.uint(20003));
 
-    let result = await stStxBtcToken.setTokenUri(deployer, "test-uri");
-    result.expectOk().expectBool(true);
+    expect(stStxBtcToken.mintForProtocol(wallet_1, 100, wallet_1)).toBeErr(Cl.uint(20003));
 
-    call = await stStxBtcToken.getTokenUri();
-    call.result.expectOk().expectSome().expectUtf8("test-uri");
-  },
-});
-
-//-------------------------------------
-// Error
-//-------------------------------------
-
-Clarinet.test({
-  name: "ststxbtc-token: can not transfer is sender is not tx-sender, or sender has not enough",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-    let wallet_2 = accounts.get("wallet_2")!;
-
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token",
-        "transfer",
-        [
-          types.uint(100 * 1000000),
-          types.principal(wallet_1.address),
-          types.principal(wallet_2.address),
-          types.none(),
-        ],
-        deployer.address
-      ),
-    ]);
-    block.receipts[0].result.expectErr().expectUint(1401);
-
-    let result = await stStxBtcToken.transfer(wallet_1, 20, wallet_1.address);
-    result.expectErr().expectUint(2);
-  },
-});
-
-//-------------------------------------
-// Access
-//-------------------------------------
-
-Clarinet.test({
-  name: "ststxbtc-token: only protocol can set token URI, mint and burn for protocol",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let stStxBtcToken = new StStxBtcToken(chain, deployer);
-
-    let result = await stStxBtcToken.setTokenUri(wallet_1, "test-uri");
-    result.expectErr().expectUint(20003);
-
-    result = await stStxBtcToken.mintForProtocol(
-      wallet_1,
-      100,
-      wallet_1.address
-    );
-    result.expectErr().expectUint(20003);
-
-    result = await stStxBtcToken.burnForProtocol(
-      wallet_1,
-      100,
-      deployer.address
-    );
-    result.expectErr().expectUint(20003);
-  },
+    expect(stStxBtcToken.burnForProtocol(wallet_1, 100, deployer)).toBeErr(Cl.uint(20003));
+  });
 });

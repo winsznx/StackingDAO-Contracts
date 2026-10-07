@@ -1,96 +1,87 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
+import { qualifiedName } from "./tests-utils";
 
 // ---------------------------------------------------------
 // sDAO Tax
 // ---------------------------------------------------------
 
-class Tax {
-  chain: Chain;
-  deployer: Account;
+export class Tax {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  shouldHandleTax() {
-    return this.chain.callReadOnlyFn("tax-v1", "should-handle-tax", [], this.deployer.address);
+  shouldHandleTax(): ClarityValue {
+    return simnet.callReadOnlyFn("tax-v1", "should-handle-tax", [], this.deployer).result;
   }
 
-  getMinBalanceToHandle() {
-    return this.chain.callReadOnlyFn("tax-v1", "get-min-balance-to-handle", [], this.deployer.address);
+  getMinBalanceToHandle(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "tax-v1",
+      "get-min-balance-to-handle",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getPercentageToSwap() {
-    return this.chain.callReadOnlyFn("tax-v1", "get-percentage-to-swap", [], this.deployer.address);
+  getPercentageToSwap(): ClarityValue {
+    return simnet.callReadOnlyFn("tax-v1", "get-percentage-to-swap", [], this.deployer).result;
   }
 
-  checkJob() {
-    return this.chain.callReadOnlyFn("tax-v1", "check-job", [], this.deployer.address);
+  checkJob(): ClarityValue {
+    return simnet.callReadOnlyFn("tax-v1", "check-job", [], this.deployer).result;
   }
 
-  initialize(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("tax-v1", "initialize", [
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  initialize(caller: string): ClarityValue {
+    return simnet.callPublicFn("tax-v1", "initialize", [], caller).result;
   }
 
-  runJob(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("tax-v1", "run-job", [
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  runJob(caller: string): ClarityValue {
+    return simnet.callPublicFn("tax-v1", "run-job", [], caller).result;
   }
 
-  handleTax(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("tax-v1", "handle-tax", [
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  handleTax(caller: string): ClarityValue {
+    return simnet.callPublicFn("tax-v1", "handle-tax", [], caller).result;
   }
 
-  retreiveStxTokens(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("tax-v1", "retreive-stx-tokens", [
-        types.uint(amount * 1000000),
-        types.principal(receiver)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  retreiveStxTokens(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "tax-v1",
+      "retreive-stx-tokens",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  retreiveTokens(caller: Account, token: string, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("tax-v1", "retreive-tokens", [
-        types.principal(qualifiedName(token)),
-        types.uint(amount * 1000000),
-        types.principal(receiver)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  retreiveTokens(caller: string, token: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "tax-v1",
+      "retreive-tokens",
+      [
+        Cl.principal(qualifiedName(token)),
+        Cl.uint(amount * 1_000_000),
+        Cl.principal(receiver),
+      ],
+      caller,
+    ).result;
   }
 
-  setMinBalanceToHandle(caller: Account, minBalance: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("tax-v1", "set-min-balance-to-handle ", [
-        types.uint(minBalance * 1000000)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setMinBalanceToHandle(caller: string, minBalance: number): ClarityValue {
+    return simnet.callPublicFn(
+      "tax-v1",
+      "set-min-balance-to-handle",
+      [Cl.uint(minBalance * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  setPercentageToSwap(caller: Account, percentage: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("tax-v1", "set-percentage-to-swap", [
-        types.uint(percentage * 10000)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  setPercentageToSwap(caller: string, percentage: number): ClarityValue {
+    return simnet.callPublicFn(
+      "tax-v1",
+      "set-percentage-to-swap",
+      [Cl.uint(percentage * 10_000)],
+      caller,
+    ).result;
   }
 }
-export { Tax };

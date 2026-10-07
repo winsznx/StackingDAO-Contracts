@@ -1,30 +1,26 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // Return STX Job
 // ---------------------------------------------------------
 
-class ReturnStxJob {
-  chain: Chain;
-  deployer: Account;
+export class ReturnStxJob {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  checkJob() {
-    return this.chain.callReadOnlyFn("return-stx-job-v1", "check-job", [], this.deployer.address);
+  checkJob(): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "return-stx-job-v1",
+      "check-job",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  runJob(caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("return-stx-job-v1", "run-job", [
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  runJob(caller: string): ClarityValue {
+    return simnet.callPublicFn("return-stx-job-v1", "run-job", [], caller).result;
   }
-
 }
-export { ReturnStxJob };

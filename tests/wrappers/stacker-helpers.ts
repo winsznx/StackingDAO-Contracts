@@ -1,87 +1,130 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
+import { hexToBytes, qualifiedName } from "./tests-utils";
+
+const POX_ADDR = Cl.tuple({
+  version: Cl.buffer(new Uint8Array([0x00])),
+  hashbytes: Cl.buffer(hexToBytes("f632e6f9d29bfb07bc8948ca6e0dd09358f003ac")),
+});
 
 // ---------------------------------------------------------
 // Stacker
 // ---------------------------------------------------------
 
-class Stacker {
-  chain: Chain;
-  deployer: Account;
+export class Stacker {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getStackingUnlockBurnHeight(stackerId: number) {
-    return this.chain.callReadOnlyFn("stacker-" + stackerId, "get-stacking-unlock-burn-height", [], this.deployer.address);
+  getStackingUnlockBurnHeight(stackerId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacker-" + stackerId,
+      "get-stacking-unlock-burn-height",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getStackingStxStacked(stackerId: number) {
-    return this.chain.callReadOnlyFn("stacker-" + stackerId, "get-stacking-stx-stacked", [], this.deployer.address);
+  getStackingStxStacked(stackerId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacker-" + stackerId,
+      "get-stacking-stx-stacked",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getStxBalance(stackerId: number) {
-    return this.chain.callReadOnlyFn("stacker-" + stackerId, "get-stx-balance", [], this.deployer.address);
+  getStxBalance(stackerId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacker-" + stackerId,
+      "get-stx-balance",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getStxStacked(stackerId: number) {
-    return this.chain.callReadOnlyFn("stacker-" + stackerId, "get-stx-stacked", [], this.deployer.address);
+  getStxStacked(stackerId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacker-" + stackerId,
+      "get-stx-stacked",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getStackerInfo(stackerId: number) {
-    return this.chain.callReadOnlyFn("stacker-" + stackerId, "get-stacker-info", [], this.deployer.address);
+  getStackerInfo(stackerId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacker-" + stackerId,
+      "get-stacker-info",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getStxAccount(stackerId: number) {
-    return this.chain.callReadOnlyFn("stacker-" + stackerId, "get-stx-account", [], this.deployer.address);
+  getStxAccount(stackerId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacker-" + stackerId,
+      "get-stx-account",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  getPoxInfo(stackerId: number) {
-    return this.chain.callReadOnlyFn("stacker-" + stackerId, "get-pox-info", [], this.deployer.address);
+  getPoxInfo(stackerId: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "stacker-" + stackerId,
+      "get-pox-info",
+      [],
+      this.deployer,
+    ).result;
   }
 
-  initiateStacking(stackerId: number, caller: Account, amount: number, startBurnHeight: number, lockPeriod: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("stacker-" + stackerId, "initiate-stacking", [
-        types.principal(qualifiedName("reserve-v1")),
-        types.tuple({ 'version': '0x00', 'hashbytes': '0xf632e6f9d29bfb07bc8948ca6e0dd09358f003ac'}),
-        types.uint(amount * 1000000),
-        types.uint(startBurnHeight), 
-        types.uint(lockPeriod) 
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  initiateStacking(
+    stackerId: number,
+    caller: string,
+    amount: number,
+    startBurnHeight: number,
+    lockPeriod: number,
+  ): ClarityValue {
+    return simnet.callPublicFn(
+      "stacker-" + stackerId,
+      "initiate-stacking",
+      [
+        Cl.principal(qualifiedName("reserve-v1")),
+        POX_ADDR,
+        Cl.uint(amount * 1_000_000),
+        Cl.uint(startBurnHeight),
+        Cl.uint(lockPeriod),
+      ],
+      caller,
+    ).result;
   }
 
-  stackIncrease(stackerId: number, caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("stacker-" + stackerId, "stack-increase", [
-        types.principal(qualifiedName("reserve-v1")),
-        types.uint(amount * 1000000)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  stackIncrease(stackerId: number, caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacker-" + stackerId,
+      "stack-increase",
+      [Cl.principal(qualifiedName("reserve-v1")), Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  stackExtend(stackerId: number, caller: Account, extendCount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("stacker-" + stackerId, "stack-extend", [
-        types.uint(extendCount),
-        types.tuple({ 'version': '0x00', 'hashbytes': '0xf632e6f9d29bfb07bc8948ca6e0dd09358f003ac'}),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  stackExtend(stackerId: number, caller: string, extendCount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "stacker-" + stackerId,
+      "stack-extend",
+      [Cl.uint(extendCount), POX_ADDR],
+      caller,
+    ).result;
   }
 
-  returnStx(stackerId: number, caller: Account) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("stacker-" + stackerId, "return-stx", [
-        types.principal(qualifiedName("reserve-v1")),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  returnStx(stackerId: number, caller: string): ClarityValue {
+    return simnet.callPublicFn(
+      "stacker-" + stackerId,
+      "return-stx",
+      [Cl.principal(qualifiedName("reserve-v1"))],
+      caller,
+    ).result;
   }
 }
-export { Stacker };

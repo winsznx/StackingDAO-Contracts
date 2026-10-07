@@ -1,90 +1,87 @@
-import { Tx, Chain, Account, types } from 'https://deno.land/x/clarinet/index.ts';
-import { qualifiedName } from './tests-utils.ts';
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // Reserve
 // ---------------------------------------------------------
 
-class Reserve {
-  chain: Chain;
-  deployer: Account;
+export class Reserve {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getStxForWithdrawals() {
-    return this.chain.callReadOnlyFn("reserve-v1", "get-stx-for-withdrawals", [], this.deployer.address);
+  getStxForWithdrawals(): ClarityValue {
+    return simnet.callReadOnlyFn("reserve-v1", "get-stx-for-withdrawals", [], this.deployer).result;
   }
 
-  getStxStacking() {
-    return this.chain.callReadOnlyFn("reserve-v1", "get-stx-stacking", [], this.deployer.address);
+  getStxStacking(): ClarityValue {
+    return simnet.callReadOnlyFn("reserve-v1", "get-stx-stacking", [], this.deployer).result;
   }
 
-  getStxStackingAtBlock(blockHeight: number) {
-    return this.chain.callReadOnlyFn("reserve-v1", "get-stx-stacking-at-block", [
-      types.uint(blockHeight)
-    ], this.deployer.address);
+  getStxStackingAtBlock(blockHeight: number): ClarityValue {
+    return simnet.callReadOnlyFn(
+      "reserve-v1",
+      "get-stx-stacking-at-block",
+      [Cl.uint(blockHeight)],
+      this.deployer,
+    ).result;
   }
 
-  getStxBalance() {
-    return this.chain.callReadOnlyFn("reserve-v1", "get-stx-balance", [], this.deployer.address);
+  getStxBalance(): ClarityValue {
+    return simnet.callReadOnlyFn("reserve-v1", "get-stx-balance", [], this.deployer).result;
   }
 
-  getTotalStx() {
-    return this.chain.callReadOnlyFn("reserve-v1", "get-total-stx", [], this.deployer.address);
+  getTotalStx(): ClarityValue {
+    return simnet.callReadOnlyFn("reserve-v1", "get-total-stx", [], this.deployer).result;
   }
 
-  getShutdownEnabled() {
-    return this.chain.callReadOnlyFn("reserve-v1", "get-shutdown-enabled", [], this.deployer.address);
+  getShutdownEnabled(): ClarityValue {
+    return simnet.callReadOnlyFn("reserve-v1", "get-shutdown-enabled", [], this.deployer).result;
   }
 
-  lockStxForWithdrawal(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("reserve-v1", "lock-stx-for-withdrawal", [
-        types.uint(amount * 1000000)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  lockStxForWithdrawal(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "reserve-v1",
+      "lock-stx-for-withdrawal",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  requestStxForWithdrawal(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("reserve-v1", "request-stx-for-withdrawal", [
-        types.uint(amount * 1000000),
-        types.principal(receiver)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  requestStxForWithdrawal(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "reserve-v1",
+      "request-stx-for-withdrawal",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  requestStxToStack(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("reserve-v1", "request-stx-to-stack", [
-        types.uint(amount * 1000000),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  requestStxToStack(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "reserve-v1",
+      "request-stx-to-stack",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  returnStxFromStacking(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("reserve-v1", "return-stx-from-stacking", [
-        types.uint(amount * 1000000),
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  returnStxFromStacking(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "reserve-v1",
+      "return-stx-from-stacking",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 
-  getStx(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall("reserve-v1", "get-stx", [
-        types.uint(amount * 1000000),
-        types.principal(receiver)
-      ], caller.address)
-    ]);
-    return block.receipts[0].result;
+  getStx(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "reserve-v1",
+      "get-stx",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 }
-export { Reserve };

@@ -1,71 +1,56 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
-import { qualifiedName } from '../wrappers/tests-utils.ts';
-qualifiedName("")
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { CoreV1 as Core } from '../wrappers/stacking-dao-core-helpers.ts';
-import { ReturnStxJob } from '../wrappers/return-stx-job-helpers.ts';
-import { Reserve } from '../wrappers/reserve-helpers.ts';
+import { qualifiedName, uintWithDecimals } from "../wrappers/tests-utils";
+import { CoreV1 as Core } from "../wrappers/stacking-dao-core-helpers";
+import { ReturnStxJob } from "../wrappers/return-stx-job-helpers";
+import { Reserve } from "../wrappers/reserve-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
 
 //-------------------------------------
-// Return STX Job 
+// Return STX Job
 //-------------------------------------
 
-Clarinet.test({
-  name: "return-stx-job: run job",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let returnStxJob = new ReturnStxJob(chain, deployer);
-    let core = new Core(chain, deployer);
-    let reserve = new Reserve(chain, deployer);
+describe("return-stx-job", () => {
+  it("return-stx-job: run job", () => {
+    const returnStxJob = new ReturnStxJob(deployer);
+    const core = new Core(deployer);
+    const reserve = new Reserve(deployer);
 
     // Transfer 200 STX to reserve
-    let block = chain.mineBlock([
-      Tx.transferSTX(200 * 1000000, qualifiedName("reserve-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(simnet.transferSTX(200 * 1_000_000, qualifiedName("reserve-v1"), deployer).result).toBeOk(Cl.bool(true));
 
     // Request 200 STX to stack
     // Needed so we can actually return in later in the test
-    let result = await reserve.requestStxToStack(deployer, 200);
-    result.expectOk().expectUintWithDecimals(200);
+    expect(reserve.requestStxToStack(deployer, 200)).toBeOk(uintWithDecimals(200));
 
     // 200 STX stacking
-    let call:any = await reserve.getStxStacking();
-    call.result.expectOk().expectUintWithDecimals(200);
+    expect(reserve.getStxStacking()).toBeOk(uintWithDecimals(200));
 
     // Stacker does not have STX
-    call = returnStxJob.checkJob();
-    call.result.expectOk().expectBool(false);
+    expect(returnStxJob.checkJob()).toBeOk(Cl.bool(false));
 
     // Reserve has no STX left
-    call = core.getStxBalance(qualifiedName("reserve-v1"));
-    call.result.expectUintWithDecimals(0);
+    expect(core.getStxBalance(qualifiedName("reserve-v1"))).toBeUint(uintWithDecimals(0).value);
 
     // Transfer 10 STX to stacker-1
-    block = chain.mineBlock([
-      Tx.transferSTX(10 * 1000000, qualifiedName("stacker-1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(simnet.transferSTX(10 * 1_000_000, qualifiedName("stacker-1"), deployer).result).toBeOk(Cl.bool(true));
 
     // Stacker has STX, can return to reserve
-    call = returnStxJob.checkJob();
-    call.result.expectOk().expectBool(true);
+    expect(returnStxJob.checkJob()).toBeOk(Cl.bool(true));
 
     // Run job to return STX to reserve
-    result = await returnStxJob.runJob(deployer);
-    result.expectOk().expectBool(true);
+    expect(returnStxJob.runJob(deployer)).toBeOk(Cl.bool(true));
 
     // Should not run again
-    call = returnStxJob.checkJob();
-    call.result.expectOk().expectBool(false);
+    expect(returnStxJob.checkJob()).toBeOk(Cl.bool(false));
 
     // 10 STX back in reserve
-    call = core.getStxBalance(qualifiedName("reserve-v1"));
-    call.result.expectUintWithDecimals(10);
+    expect(core.getStxBalance(qualifiedName("reserve-v1"))).toBeUint(uintWithDecimals(10).value);
 
     // 10 STX returned
-    call = await reserve.getStxStacking();
-    call.result.expectOk().expectUintWithDecimals(200 - 10);
-  }
+    expect(reserve.getStxStacking()).toBeOk(uintWithDecimals(200 - 10));
+  });
 });

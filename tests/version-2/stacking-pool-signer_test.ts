@@ -1,447 +1,368 @@
-import { Account, Chain, Clarinet, Tx, types } from "https://deno.land/x/clarinet/index.ts";
-import { hexToBytes, qualifiedName } from "../wrappers/tests-utils.ts";
+import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
-import { StackingDelegate } from '../wrappers/stacking-delegate-helpers.ts';
-import { StackingPoolSigner } from '../wrappers/stacking-pool-signer-helpers.ts';
-import { DataPools } from '../wrappers/data-pools-helpers.ts';
+import {
+  hexToBytes,
+  mineEmptyBlockUntil,
+  okValue,
+  qualifiedName,
+  tupleField,
+  uintWithDecimals,
+} from "../wrappers/tests-utils";
+import { StackingDelegate } from "../wrappers/stacking-delegate-helpers";
+import { StackingPoolSigner } from "../wrappers/stacking-pool-signer-helpers";
+import { DataPools } from "../wrappers/data-pools-helpers";
+
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer")!;
+const wallet_1 = accounts.get("wallet_1")!;
 
 //-------------------------------------
-// Core 
+// Core
 //-------------------------------------
 
-Clarinet.test({
-  name: "stacking-pool-signer: prepare",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let dataPools = new DataPools(chain, deployer);
-    let stackingDelegate = new StackingDelegate(chain, deployer);
-    let stackingPool = new StackingPoolSigner(chain, deployer);
-    await stackingPool.addSignatures(chain, deployer);
+describe("stacking-pool-signer", () => {
+  it("stacking-pool-signer: prepare", () => {
+    const dataPools = new DataPools(deployer);
+    const stackingDelegate = new StackingDelegate(deployer);
+    const stackingPool = new StackingPoolSigner(deployer);
+    stackingPool.addSignatures(deployer);
 
     //
     // Setup pool
     //
-    let result = dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-signer-v1")])
-    result.expectOk().expectBool(true);
+    expect(dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-signer-v1")])).toBeOk(Cl.bool(true));
 
-    result = dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-signer-v1"), [qualifiedName("stacking-delegate-1-1")])
-    result.expectOk().expectBool(true);
+    expect(
+      dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-signer-v1"), [qualifiedName("stacking-delegate-1-1")]),
+    ).toBeOk(Cl.bool(true));
 
     //
     // 500k STX to delegate-1-1
     //
+    expect(simnet.transferSTX(500000 * 1_000_000, qualifiedName("reserve-v1"), deployer).result).toBeOk(Cl.bool(true));
 
-    let block = chain.mineBlock([
-      Tx.transferSTX(500000 * 1000000, qualifiedName("reserve-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(
+      stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000),
+    ).toBeOk(uintWithDecimals(500000));
 
-    result = stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000);
-    result.expectOk().expectUintWithDecimals(500000);
-
-    let call = await stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-1"))
-    call.result.expectTuple()["locked"].expectUintWithDecimals(0);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(500000);
-    call.result.expectTuple()["unlock-height"].expectUint(0);
+    let account = stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-1"));
+    expect(tupleField(account, "locked")).toBeUint(uintWithDecimals(0).value);
+    expect(tupleField(account, "unlocked")).toBeUint(uintWithDecimals(500000).value);
+    expect(tupleField(account, "unlock-height")).toBeUint(0);
 
     //
     // Delegate 200k
     //
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
 
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
+    mineEmptyBlockUntil(15);
 
-    chain.mineEmptyBlockUntil(15);
+    expect(stackingPool.prepare(wallet_1)).toBeOk(Cl.bool(true));
 
-    result = stackingPool.prepare(wallet_1);
-    result.expectOk().expectBool(true);
-
-    call = await stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-1"))
-    call.result.expectTuple()["locked"].expectUintWithDecimals(200000);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(500000 - 200000);
-    call.result.expectTuple()["unlock-height"].expectUint(42);
+    account = stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-1"));
+    expect(tupleField(account, "locked")).toBeUint(uintWithDecimals(200000).value);
+    expect(tupleField(account, "unlocked")).toBeUint(uintWithDecimals(500000 - 200000).value);
+    expect(tupleField(account, "unlock-height")).toBeUint(42);
 
     //
     // Prepare again
     //
+    expect(stackingDelegate.revokeDelegateStx(deployer, "stacking-delegate-1-1")).toBeOk(Cl.bool(true));
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 250000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
 
-    result = stackingDelegate.revokeDelegateStx(deployer, "stacking-delegate-1-1");
-    result.expectOk().expectBool(true);
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 250000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
+    expect(stackingPool.getCycleToIndex(1)).toBeSome(Cl.uint(0));
 
-    call = await stackingPool.getCycleToIndex(1);
-    call.result.expectSome().expectUint(0);
+    expect(stackingPool.prepare(wallet_1)).toBeOk(Cl.bool(true));
 
-    result = stackingPool.prepare(wallet_1);
-    result.expectOk().expectBool(true);
+    account = stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-1"));
+    expect(tupleField(account, "locked")).toBeUint(uintWithDecimals(250000).value);
+    expect(tupleField(account, "unlocked")).toBeUint(uintWithDecimals(500000 - 250000).value);
+    expect(tupleField(account, "unlock-height")).toBeUint(42);
+  });
 
-    call = await stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-1"))
-    call.result.expectTuple()["locked"].expectUintWithDecimals(250000);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(500000 - 250000);
-    call.result.expectTuple()["unlock-height"].expectUint(42);
-  }
-});
-
-Clarinet.test({
-  name: "stacking-pool-signer: can prepare multiple times",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let dataPools = new DataPools(chain, deployer);
-    let stackingDelegate = new StackingDelegate(chain, deployer);
-    let stackingPool = new StackingPoolSigner(chain, deployer);
-    await stackingPool.addSignatures(chain, deployer);
+  it("stacking-pool-signer: can prepare multiple times", () => {
+    const dataPools = new DataPools(deployer);
+    const stackingDelegate = new StackingDelegate(deployer);
+    const stackingPool = new StackingPoolSigner(deployer);
+    stackingPool.addSignatures(deployer);
 
     //
     // Setup pool
     //
-    let result = dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-signer-v1")])
-    result.expectOk().expectBool(true);
+    expect(dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-signer-v1")])).toBeOk(Cl.bool(true));
 
-    result = dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-signer-v1"), [qualifiedName("stacking-delegate-1-1"), qualifiedName("stacking-delegate-1-2")])
-    result.expectOk().expectBool(true);
+    expect(
+      dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-signer-v1"), [qualifiedName("stacking-delegate-1-1"), qualifiedName("stacking-delegate-1-2")]),
+    ).toBeOk(Cl.bool(true));
 
     //
     // 500k STX to delegate-1-1
     //
+    expect(simnet.transferSTX(1000000 * 1_000_000, qualifiedName("reserve-v1"), deployer).result).toBeOk(Cl.bool(true));
 
-    let block = chain.mineBlock([
-      Tx.transferSTX(1000000 * 1000000, qualifiedName("reserve-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
-
-    result = stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000);
-    result.expectOk().expectUintWithDecimals(500000);
-    result = stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-2", 500000);
-    result.expectOk().expectUintWithDecimals(500000);
+    expect(
+      stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000),
+    ).toBeOk(uintWithDecimals(500000));
+    expect(
+      stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-2", 500000),
+    ).toBeOk(uintWithDecimals(500000));
 
     //
     // Delegate 200k & prepare pool
     //
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
 
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
+    mineEmptyBlockUntil(18);
 
-    chain.mineEmptyBlockUntil(19);
-
-    result = stackingPool.prepare(wallet_1);
-    result.expectOk().expectBool(true);
+    expect(stackingPool.prepare(wallet_1)).toBeOk(Cl.bool(true));
 
     //
     // Prepare again - Need to have extra delegated
     //
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-2", 10, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
 
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-2", 10, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
-
-    result = stackingPool.prepare(wallet_1);
-    result.expectOk().expectBool(true);
+    expect(stackingPool.prepare(wallet_1)).toBeOk(Cl.bool(true));
 
     //
     // Check data
     //
+    let account = stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-1"));
+    expect(tupleField(account, "locked")).toBeUint(uintWithDecimals(200000).value);
+    expect(tupleField(account, "unlocked")).toBeUint(uintWithDecimals(500000 - 200000).value);
+    expect(tupleField(account, "unlock-height")).toBeUint(42);
 
-    let call = await stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-1"))
-    call.result.expectTuple()["locked"].expectUintWithDecimals(200000);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(500000 - 200000);
-    call.result.expectTuple()["unlock-height"].expectUint(42);
+    account = stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-2"));
+    expect(tupleField(account, "locked")).toBeUint(uintWithDecimals(10).value);
+    expect(tupleField(account, "unlocked")).toBeUint(uintWithDecimals(500000 - 10).value);
+    expect(tupleField(account, "unlock-height")).toBeUint(42);
+  });
 
-    call = await stackingPool.getStxAccount(qualifiedName("stacking-delegate-1-2"))
-    call.result.expectTuple()["locked"].expectUintWithDecimals(10);
-    call.result.expectTuple()["unlocked"].expectUintWithDecimals(500000 - 10);
-    call.result.expectTuple()["unlock-height"].expectUint(42);
-  }
-});
-
-Clarinet.test({
-  name: "stacking-pool-signer: can prepare even if threshold not met",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-
-    let dataPools = new DataPools(chain, deployer);
-    let stackingDelegate = new StackingDelegate(chain, deployer);
-    let stackingPool = new StackingPoolSigner(chain, deployer);
-    await stackingPool.addSignatures(chain, deployer);
+  it("stacking-pool-signer: can prepare even if threshold not met", () => {
+    const dataPools = new DataPools(deployer);
+    const stackingDelegate = new StackingDelegate(deployer);
+    const stackingPool = new StackingPoolSigner(deployer);
+    stackingPool.addSignatures(deployer);
 
     //
     // Setup pool
     //
-    let result = dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-signer-v1")])
-    result.expectOk().expectBool(true);
+    expect(dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-signer-v1")])).toBeOk(Cl.bool(true));
 
-    result = dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-signer-v1"), [qualifiedName("stacking-delegate-1-1"), qualifiedName("stacking-delegate-1-2")])
-    result.expectOk().expectBool(true);
+    expect(
+      dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-signer-v1"), [qualifiedName("stacking-delegate-1-1"), qualifiedName("stacking-delegate-1-2")]),
+    ).toBeOk(Cl.bool(true));
 
-    //
-    //
-    //
-    let block = chain.mineBlock([
-      Tx.transferSTX(500000 * 1000000, qualifiedName("reserve-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(simnet.transferSTX(500000 * 1_000_000, qualifiedName("reserve-v1"), deployer).result).toBeOk(Cl.bool(true));
 
-    result = stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000);
-    result.expectOk().expectUintWithDecimals(500000);
+    expect(
+      stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000),
+    ).toBeOk(uintWithDecimals(500000));
 
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 50000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 50000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
 
-    chain.mineEmptyBlockUntil(19);
+    mineEmptyBlockUntil(18);
 
     // ERR_STACKING_THRESHOLD_NOT_MET
-    result = stackingPool.prepare(deployer);
-    result.expectOk().expectBool(true);
-  }
-});
+    expect(stackingPool.prepare(deployer)).toBeOk(Cl.bool(true));
+  });
 
-//-------------------------------------
-// Admin 
-//-------------------------------------
+  //-------------------------------------
+  // Admin
+  //-------------------------------------
 
-Clarinet.test({
-  name: "stacking-pool-signer: can set new owner",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("stacking-pool-signer: can set new owner", () => {
+    const stackingPool = new StackingPoolSigner(deployer);
 
-    let stackingPool = new StackingPoolSigner(chain, deployer);
+    expect(stackingPool.getPoolOwner()).toBePrincipal(deployer);
 
-    let call = await stackingPool.getPoolOwner();
-    call.result.expectPrincipal(deployer.address);
+    expect(stackingPool.setPoolOwner(deployer, wallet_1)).toBeOk(Cl.bool(true));
 
-    let result = stackingPool.setPoolOwner(deployer, wallet_1.address);
-    result.expectOk().expectBool(true);
+    expect(stackingPool.getPoolOwner()).toBePrincipal(wallet_1);
+  });
 
-    call = await stackingPool.getPoolOwner();
-    call.result.expectPrincipal(wallet_1.address);
-  }
-});
+  it("stacking-pool-signer: can set pox reward address", () => {
+    const stackingPool = new StackingPoolSigner(deployer);
 
-Clarinet.test({
-  name: "stacking-pool-signer: can set pox reward address",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    let addr = stackingPool.getPoxRewardAddress();
+    expect(tupleField(addr, "version")).toBeBuff(hexToBytes("0x04"));
+    expect(tupleField(addr, "hashbytes")).toBeBuff(hexToBytes("0x2fffa9a09bb7fa7dced44834d77ee81c49c5f0cc"));
 
-    let stackingPool = new StackingPoolSigner(chain, deployer);
+    expect(
+      stackingPool.setPoxRewardAddress(deployer, "0x01", "0xf632e6f9d29bfb07bc8948ca6e0dd09358f003ab"),
+    ).toBeOk(Cl.bool(true));
 
-    let call = await stackingPool.getPoxRewardAddress();
-    call.result.expectTuple()["version"].expectBuff(hexToBytes("0x04"));
-    call.result.expectTuple()["hashbytes"].expectBuff(hexToBytes("0x2fffa9a09bb7fa7dced44834d77ee81c49c5f0cc"));
+    addr = stackingPool.getPoxRewardAddress();
+    expect(tupleField(addr, "version")).toBeBuff(hexToBytes("0x01"));
+    expect(tupleField(addr, "hashbytes")).toBeBuff(hexToBytes("0xf632e6f9d29bfb07bc8948ca6e0dd09358f003ab"));
+  });
 
-    let result = stackingPool.setPoxRewardAddress(deployer, "0x01", "0xf632e6f9d29bfb07bc8948ca6e0dd09358f003ab");
-    result.expectOk().expectBool(true);
+  //-------------------------------------
+  // PoX Errors
+  //-------------------------------------
 
-    call = await stackingPool.getPoxRewardAddress();
-    call.result.expectTuple()["version"].expectBuff(hexToBytes("0x01"));
-    call.result.expectTuple()["hashbytes"].expectBuff(hexToBytes("0xf632e6f9d29bfb07bc8948ca6e0dd09358f003ab"));
-  }
-});
+  it("stacking-pool-signer: can not delegate again without revoking first", () => {
+    const stackingDelegate = new StackingDelegate(deployer);
 
-//-------------------------------------
-// PoX Errors 
-//-------------------------------------
+    expect(simnet.transferSTX(500000 * 1_000_000, qualifiedName("reserve-v1"), deployer).result).toBeOk(Cl.bool(true));
 
-Clarinet.test({
-  name: "stacking-pool-signer: can not delegate again without revoking first",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+    expect(
+      stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000),
+    ).toBeOk(uintWithDecimals(500000));
 
-    let stackingDelegate = new StackingDelegate(chain, deployer);
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 50000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
 
-    let block = chain.mineBlock([
-      Tx.transferSTX(500000 * 1000000, qualifiedName("reserve-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
-
-    let result = stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000);
-    result.expectOk().expectUintWithDecimals(500000);
-
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 50000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
-
-    // ERR_STACKING_ALREADY_DELEGATED 
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectErr().expectUint(20);
+    // ERR_STACKING_ALREADY_DELEGATED
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeErr(Cl.uint(20));
 
     // Revoke
-    result = stackingDelegate.revokeDelegateStx(deployer,  "stacking-delegate-1-1");
-    result.expectOk().expectBool(true);
+    expect(stackingDelegate.revokeDelegateStx(deployer, "stacking-delegate-1-1")).toBeOk(Cl.bool(true));
 
     // Can delegate again
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
-  }
-});
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
+  });
 
-Clarinet.test({
-  name: "stacking-pool-signer: can not delegate again if already stacked",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("stacking-pool-signer: can not delegate again if already stacked", () => {
+    const stackingDelegate = new StackingDelegate(deployer);
+    const stackingPool = new StackingPoolSigner(deployer);
 
-    let stackingDelegate = new StackingDelegate(chain, deployer);
-    let stackingPool = new StackingPoolSigner(chain, deployer);
+    expect(simnet.transferSTX(500000 * 1_000_000, qualifiedName("reserve-v1"), deployer).result).toBeOk(Cl.bool(true));
 
-    let block = chain.mineBlock([
-      Tx.transferSTX(500000 * 1000000, qualifiedName("reserve-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(
+      stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000),
+    ).toBeOk(uintWithDecimals(500000));
 
-    let result = stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000);
-    result.expectOk().expectUintWithDecimals(500000);
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
 
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
-
-    result = stackingPool.delegateStackStx(deployer, qualifiedName("stacking-delegate-1-1"), 200000);
-    result.expectOk().expectTuple()["lock-amount"].expectUintWithDecimals(200000);
-    result.expectOk().expectTuple()["stacker"].expectPrincipal(qualifiedName("stacking-delegate-1-1"));
-    result.expectOk().expectTuple()["unlock-burn-height"].expectUint(42);
+    const stackResult = stackingPool.delegateStackStx(deployer, qualifiedName("stacking-delegate-1-1"), 200000);
+    const stackInner = okValue(stackResult);
+    expect(tupleField(stackInner, "lock-amount")).toBeUint(uintWithDecimals(200000).value);
+    expect(tupleField(stackInner, "stacker")).toBePrincipal(qualifiedName("stacking-delegate-1-1"));
+    expect(tupleField(stackInner, "unlock-burn-height")).toBeUint(42);
 
     // ERR_STACKING_ALREADY_STACKED
-    result = stackingPool.delegateStackStx(deployer, qualifiedName("stacking-delegate-1-1"), 200000);
-    result.expectErr().expectUint(3);
+    expect(
+      stackingPool.delegateStackStx(deployer, qualifiedName("stacking-delegate-1-1"), 200000),
+    ).toBeErr(Cl.uint(3));
 
     // Revoke
-    result = stackingDelegate.revokeDelegateStx(deployer,  "stacking-delegate-1-1");
-    result.expectOk().expectBool(true);
+    expect(stackingDelegate.revokeDelegateStx(deployer, "stacking-delegate-1-1")).toBeOk(Cl.bool(true));
 
     // Can delegate again
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
-  }
-});
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
+  });
 
-Clarinet.test({
-  name: "stacking-pool-signer: can not delegate without funds",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
+  it("stacking-pool-signer: can not delegate without funds", () => {
+    const stackingDelegate = new StackingDelegate(deployer);
+    const stackingPool = new StackingPoolSigner(deployer);
 
-    let stackingDelegate = new StackingDelegate(chain, deployer);
-    let stackingPool = new StackingPoolSigner(chain, deployer);
-
-    let result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42);
-    result.expectOk().expectBool(true);
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 42),
+    ).toBeOk(Cl.bool(true));
 
     // ERR_STACKING_INSUFFICIENT_FUNDS
-    result = stackingPool.delegateStackStx(deployer, qualifiedName("stacking-delegate-1-1"), 200000);
-    result.expectErr().expectUint(1);
-  }
-});
+    expect(
+      stackingPool.delegateStackStx(deployer, qualifiedName("stacking-delegate-1-1"), 200000),
+    ).toBeErr(Cl.uint(1));
+  });
 
-//-------------------------------------
-// Errors 
-//-------------------------------------
+  //-------------------------------------
+  // Errors
+  //-------------------------------------
 
-Clarinet.test({
-  name: "stacking-pool-signer: can only prepare in last blocks",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let dataPools = new DataPools(chain, deployer);
+  it("stacking-pool-signer: can only prepare in last blocks", () => {
+    const dataPools = new DataPools(deployer);
 
     //
     // Setup pool
     //
-    let result = dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-signer-v1")])
-    result.expectOk().expectBool(true);
+    expect(dataPools.setActivePools(deployer, [qualifiedName("stacking-pool-signer-v1")])).toBeOk(Cl.bool(true));
 
-    result = dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-signer-v1"), [qualifiedName("stacking-delegate-1-1")])
-    result.expectOk().expectBool(true);
+    expect(
+      dataPools.setPoolDelegates(deployer, qualifiedName("stacking-pool-signer-v1"), [qualifiedName("stacking-delegate-1-1")]),
+    ).toBeOk(Cl.bool(true));
 
     // Go to next cycle
-    chain.mineEmptyBlockUntil(22);
+    mineEmptyBlockUntil(22);
 
     //
     // Prepare
     //
-    let stackingDelegate = new StackingDelegate(chain, deployer);
-    let stackingPool = new StackingPoolSigner(chain, deployer);
-    await stackingPool.addSignatures(chain, deployer);
+    const stackingDelegate = new StackingDelegate(deployer);
+    const stackingPool = new StackingPoolSigner(deployer);
+    stackingPool.addSignatures(deployer);
 
-    let block = chain.mineBlock([
-      Tx.transferSTX(500000 * 1000000, qualifiedName("reserve-v1"), deployer.address)
-    ]);
-    block.receipts[0].result.expectOk().expectBool(true);
+    expect(simnet.transferSTX(500000 * 1_000_000, qualifiedName("reserve-v1"), deployer).result).toBeOk(Cl.bool(true));
 
-    result = stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000);
-    result.expectOk().expectUintWithDecimals(500000);
+    expect(
+      stackingDelegate.requestStxToStack(deployer, "stacking-delegate-1-1", 500000),
+    ).toBeOk(uintWithDecimals(500000));
 
-    result = stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 63);
-    result.expectOk().expectBool(true);
+    expect(
+      stackingDelegate.delegateStx(deployer, "stacking-delegate-1-1", 200000, qualifiedName("stacking-pool-signer-v1"), 63),
+    ).toBeOk(Cl.bool(true));
 
-    result = stackingPool.prepare(wallet_1)
-    result.expectErr().expectUint(99502);
+    expect(stackingPool.prepare(wallet_1)).toBeErr(Cl.uint(99502));
 
-    chain.mineEmptyBlockUntil(41);
+    mineEmptyBlockUntil(41);
 
-    result = stackingPool.prepare(wallet_1)
-    result.expectOk().expectBool(true);
-  }
-});
+    expect(stackingPool.prepare(wallet_1)).toBeOk(Cl.bool(true));
+  });
 
-Clarinet.test({
-  name: "stacking-pool-signer: can not prepare delegate if nothing delegated",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+  it("stacking-pool-signer: can not prepare delegate if nothing delegated", () => {
+    const stackingPool = new StackingPoolSigner(deployer);
+    stackingPool.addSignatures(deployer);
 
-    let stackingPool = new StackingPoolSigner(chain, deployer);
-    await stackingPool.addSignatures(chain, deployer);
+    mineEmptyBlockUntil(15);
 
-    chain.mineEmptyBlockUntil(15);
+    expect(stackingPool.prepare(wallet_1)).toBeErr(Cl.uint(4));
+  });
 
-    let result = stackingPool.prepare(wallet_1)
-    result.expectErr().expectUint(4);
-  }
-});
+  //-------------------------------------
+  // Access
+  //-------------------------------------
 
-//-------------------------------------
-// Access 
-//-------------------------------------
+  it("stacking-pool-signer: only pool owner can use pox wrapper methods", () => {
+    const stackingPool = new StackingPoolSigner(deployer);
 
-Clarinet.test({
-  name: "stacking-pool-signer: only pool owner can use pox wrapper methods",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
+    expect(stackingPool.delegateStackStx(wallet_1, wallet_1, 100)).toBeErr(Cl.uint(99501));
 
-    let stackingPool = new StackingPoolSigner(chain, deployer);
+    expect(stackingPool.delegateStackExtend(wallet_1, wallet_1)).toBeErr(Cl.uint(99501));
 
-    let result = stackingPool.delegateStackStx(wallet_1, wallet_1.address, 100);
-    result.expectErr().expectUint(99501);
+    expect(stackingPool.delegateStackIncrease(wallet_1, wallet_1, 10)).toBeErr(Cl.uint(99501));
 
-    result = stackingPool.delegateStackExtend(wallet_1, wallet_1.address);
-    result.expectErr().expectUint(99501);
+    expect(stackingPool.stackAggregationCommitIndexed(wallet_1, 10)).toBeErr(Cl.uint(99501));
 
-    result = stackingPool.delegateStackIncrease(wallet_1, wallet_1.address, 10);
-    result.expectErr().expectUint(99501);
+    expect(stackingPool.stackAggregationIncrease(wallet_1, 2, 2)).toBeErr(Cl.uint(99501));
+  });
 
-    result = stackingPool.stackAggregationCommitIndexed(wallet_1, 10);
-    result.expectErr().expectUint(99501);
+  it("stacking-pool-signer: only pool owner can use admin functions", () => {
+    const stackingPool = new StackingPoolSigner(deployer);
 
-    result = stackingPool.stackAggregationIncrease(wallet_1, 2, 2);
-    result.expectErr().expectUint(99501);
+    expect(
+      stackingPool.setPoxRewardAddress(wallet_1, "0x01", "0xf632e6f9d29bfb07bc8948ca6e0dd09358f003ab"),
+    ).toBeErr(Cl.uint(99501));
 
-  }
-});
-
-Clarinet.test({
-  name: "stacking-pool-signer: only pool owner can use admin functions",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    let deployer = accounts.get("deployer")!;
-    let wallet_1 = accounts.get("wallet_1")!;
-
-    let stackingPool = new StackingPoolSigner(chain, deployer);
-
-    let result = stackingPool.setPoxRewardAddress(wallet_1, "0x01", "0xf632e6f9d29bfb07bc8948ca6e0dd09358f003ab");
-    result.expectErr().expectUint(99501);
-
-    result = stackingPool.setPoolOwner(wallet_1, deployer.address);
-    result.expectErr().expectUint(99501);
-  }
+    expect(stackingPool.setPoolOwner(wallet_1, deployer)).toBeErr(Cl.uint(99501));
+  });
 });

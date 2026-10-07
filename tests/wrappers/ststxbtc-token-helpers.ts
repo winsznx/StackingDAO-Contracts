@@ -1,276 +1,183 @@
-import {
-  Tx,
-  Chain,
-  Account,
-  types,
-} from "https://deno.land/x/clarinet/index.ts";
-
+import { Cl, ClarityValue } from "@stacks/transactions";
 
 // ---------------------------------------------------------
 // stSTXbtc token V1
 // ---------------------------------------------------------
 
-class StStxBtcTokenV1 {
-  chain: Chain;
-  deployer: Account;
+export class StStxBtcTokenV1 {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getTotalSupply() {
-    return this.chain.callReadOnlyFn(
-      "ststxbtc-token",
-      "get-total-supply",
-      [],
-      this.deployer.address
-    );
+  getTotalSupply(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token", "get-total-supply", [], this.deployer).result;
   }
 
-  getName() {
-    return this.chain.callReadOnlyFn(
-      "ststxbtc-token",
-      "get-name",
-      [],
-      this.deployer.address
-    );
+  getName(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token", "get-name", [], this.deployer).result;
   }
 
-  getSymbol() {
-    return this.chain.callReadOnlyFn(
-      "ststxbtc-token",
-      "get-symbol",
-      [],
-      this.deployer.address
-    );
+  getSymbol(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token", "get-symbol", [], this.deployer).result;
   }
 
-  getDecimals() {
-    return this.chain.callReadOnlyFn(
-      "ststxbtc-token",
-      "get-decimals",
-      [],
-      this.deployer.address
-    );
+  getDecimals(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token", "get-decimals", [], this.deployer).result;
   }
 
-  getBalance(account: string) {
-    return this.chain.callReadOnlyFn(
+  getBalance(account: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-token",
       "get-balance",
-      [types.principal(account)],
-      this.deployer.address
-    );
+      [Cl.principal(account)],
+      this.deployer,
+    ).result;
   }
 
-  getTokenUri() {
-    return this.chain.callReadOnlyFn(
+  getTokenUri(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token", "get-token-uri", [], this.deployer).result;
+  }
+
+  transfer(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
       "ststxbtc-token",
-      "get-token-uri",
-      [],
-      this.deployer.address
-    );
+      "transfer",
+      [
+        Cl.uint(amount * 1_000_000),
+        Cl.principal(caller),
+        Cl.principal(receiver),
+        Cl.none(),
+      ],
+      caller,
+    ).result;
   }
 
-  transfer(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token",
-        "transfer",
-        [
-          types.uint(amount * 1000000),
-          types.principal(caller.address),
-          types.principal(receiver),
-          types.none(),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setTokenUri(caller: string, uri: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-token",
+      "set-token-uri",
+      [Cl.stringUtf8(uri)],
+      caller,
+    ).result;
   }
 
-  setTokenUri(caller: Account, uri: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token",
-        "set-token-uri",
-        [types.utf8(uri)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  mintForProtocol(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-token",
+      "mint-for-protocol",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  mintForProtocol(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token",
-        "mint-for-protocol",
-        [types.uint(amount * 1000000), types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  burnForProtocol(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-token",
+      "burn-for-protocol",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  burnForProtocol(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token",
-        "burn-for-protocol",
-        [types.uint(amount * 1000000), types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
-  }
-
-  burn(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token",
-        "burn",
-        [types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  burn(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-token",
+      "burn",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 }
-export { StStxBtcTokenV1 };
-
 
 // ---------------------------------------------------------
 // stSTXbtc token V2
 // ---------------------------------------------------------
 
-class StStxBtcToken {
-  chain: Chain;
-  deployer: Account;
+export class StStxBtcToken {
+  private deployer: string;
 
-  constructor(chain: Chain, deployer: Account) {
-    this.chain = chain;
+  constructor(deployer: string) {
     this.deployer = deployer;
   }
 
-  getTotalSupply() {
-    return this.chain.callReadOnlyFn(
-      "ststxbtc-token-v2",
-      "get-total-supply",
-      [],
-      this.deployer.address
-    );
+  getTotalSupply(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token-v2", "get-total-supply", [], this.deployer).result;
   }
 
-  getName() {
-    return this.chain.callReadOnlyFn(
-      "ststxbtc-token-v2",
-      "get-name",
-      [],
-      this.deployer.address
-    );
+  getName(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token-v2", "get-name", [], this.deployer).result;
   }
 
-  getSymbol() {
-    return this.chain.callReadOnlyFn(
-      "ststxbtc-token-v2",
-      "get-symbol",
-      [],
-      this.deployer.address
-    );
+  getSymbol(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token-v2", "get-symbol", [], this.deployer).result;
   }
 
-  getDecimals() {
-    return this.chain.callReadOnlyFn(
-      "ststxbtc-token-v2",
-      "get-decimals",
-      [],
-      this.deployer.address
-    );
+  getDecimals(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token-v2", "get-decimals", [], this.deployer).result;
   }
 
-  getBalance(account: string) {
-    return this.chain.callReadOnlyFn(
+  getBalance(account: string): ClarityValue {
+    return simnet.callReadOnlyFn(
       "ststxbtc-token-v2",
       "get-balance",
-      [types.principal(account)],
-      this.deployer.address
-    );
+      [Cl.principal(account)],
+      this.deployer,
+    ).result;
   }
 
-  getTokenUri() {
-    return this.chain.callReadOnlyFn(
+  getTokenUri(): ClarityValue {
+    return simnet.callReadOnlyFn("ststxbtc-token-v2", "get-token-uri", [], this.deployer).result;
+  }
+
+  transfer(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
       "ststxbtc-token-v2",
-      "get-token-uri",
-      [],
-      this.deployer.address
-    );
+      "transfer",
+      [
+        Cl.uint(amount * 1_000_000),
+        Cl.principal(caller),
+        Cl.principal(receiver),
+        Cl.none(),
+      ],
+      caller,
+    ).result;
   }
 
-  transfer(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token-v2",
-        "transfer",
-        [
-          types.uint(amount * 1000000),
-          types.principal(caller.address),
-          types.principal(receiver),
-          types.none(),
-        ],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  setTokenUri(caller: string, uri: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-token-v2",
+      "set-token-uri",
+      [Cl.stringUtf8(uri)],
+      caller,
+    ).result;
   }
 
-  setTokenUri(caller: Account, uri: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token-v2",
-        "set-token-uri",
-        [types.utf8(uri)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  mintForProtocol(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-token-v2",
+      "mint-for-protocol",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  mintForProtocol(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token-v2",
-        "mint-for-protocol",
-        [types.uint(amount * 1000000), types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  burnForProtocol(caller: string, amount: number, receiver: string): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-token-v2",
+      "burn-for-protocol",
+      [Cl.uint(amount * 1_000_000), Cl.principal(receiver)],
+      caller,
+    ).result;
   }
 
-  burnForProtocol(caller: Account, amount: number, receiver: string) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token-v2",
-        "burn-for-protocol",
-        [types.uint(amount * 1000000), types.principal(receiver)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
-  }
-
-  burn(caller: Account, amount: number) {
-    let block = this.chain.mineBlock([
-      Tx.contractCall(
-        "ststxbtc-token-v2",
-        "burn",
-        [types.uint(amount * 1000000)],
-        caller.address
-      ),
-    ]);
-    return block.receipts[0].result;
+  burn(caller: string, amount: number): ClarityValue {
+    return simnet.callPublicFn(
+      "ststxbtc-token-v2",
+      "burn",
+      [Cl.uint(amount * 1_000_000)],
+      caller,
+    ).result;
   }
 }
-export { StStxBtcToken };
